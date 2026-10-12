@@ -1,2 +1,72 @@
-# baseball-mcp
-A non-SDK MCP server for LLM access to MLB statistics database
+# MLB batting questions
+
+A local Go browser application that answers natural-language questions against
+fixed MLB batting snapshots. OpenAI generates a read query; SQLite supplies the
+results; a second model call explains them. SQL and database details stay on the
+server. A reusable question workflow will support an MCP adapter in a later phase.
+
+## Run locally
+
+Requires Go 1.26 or later. SQLite is compiled into Go through `go-sqlite3`; no CGO
+compiler or external database server is required.
+
+```sh
+go mod download
+go run ./cmd/import -csv advanced-mlb-24-26.csv -db mlb.db
+cp config.example.json config.json
+```
+
+Set `model` in `config.json` to the OpenAI model identifier you want to use. Set
+`OPENAI_API_KEY` in the server's environment, using your normal secret-management
+process. The key belongs on the server and is never entered in the browser.
+
+```sh
+go run . -config config.json
+```
+
+Open <http://127.0.0.1:8080> and ask, for example, “What was Luis Vázquez's OPS in
+2025?” The supplied snapshot records OPS 0.448 over 53 plate appearances. The
+“Show supporting results” switch hides or reveals the friendly result table.
+
+Configuration changes take effect on restart. `database` selects the snapshot;
+`listen` defaults to localhost; `developer_log` defaults to the private
+`.private/developer.log` file. This initial slice supports the `schema` prompting
+strategy; comparison and worked-example prompting are delivered by later tickets.
+Private logs and local configuration are ignored by Git and are never static
+assets. Keep these artifacts outside any externally configured file server.
+
+## Dataset and access rules
+
+The supplied CSV contains 1,879 combined player-season records for 857 player IDs
+across 2024–2026. All 49 exported fields are retained; source IDs distinguish the
+two players named Max Muncy. Rate values use the exported precision, and advanced
+metrics remain available alongside traditional statistics. Numeric fields are
+stored as SQLite integer or real values without rounding on import; the original
+CSV remains the source of exact decimal lexemes. The source only covers records
+with at least ten plate appearances and is not a live MLB feed.
+
+The importer checks numeric values, player-name consistency, headers, and unique
+player-season keys before atomically replacing the snapshot. Updates are manual
+and separate from the serving workflow. Compatible exports without a singles
+column derive it from hits minus doubles, triples, and home runs. The server opens each query connection
+read-only and permits one SELECT or read-only CTE over the baseball tables. SQLite
+itself validates statement boundaries; an authorizer rejects metadata,
+administrative operations, writes, and unapproved functions. Each execution has a
+ten-second deadline. Result tables and model inputs never contain more than 500
+rows. This first slice asks the user to narrow an oversized question; the planned
+partial-answer slice will preserve an explicitly partial answer.
+
+## Verify
+
+```sh
+go test ./...
+go test -race ./...
+go vet ./...
+```
+
+The suite sends public HTTP requests against a real imported SQLite database and
+controlled model responses. A local OpenAI HTTP stub exercises the real Go SDK
+without reading a key or making a paid call. It checks the verified OPS value,
+qualification-independent lookup, imported coverage and precision, SQL restrictions,
+read-only CTEs, deadlines, row caps, private routes, and failure presentation.
+Live model accuracy is a separate optional evaluation, not implied by this suite.

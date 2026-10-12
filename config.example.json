@@ -1,0 +1,8 @@
+{
+  "model": "YOUR_MODEL_IDENTIFIER",
+  "default_strategy": "schema",
+  "comparison_mode": false,
+  "database": "mlb.db",
+  "listen": "127.0.0.1:8080",
+  "developer_log": ".private/developer.log"
+}
