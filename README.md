@@ -99,3 +99,9 @@ OPS, dense-rank tenth-place ties, qualifying counts, and normal empty overlaps.
 A controlled CSV fixture checks exclusion of a high-stat nonqualifying player
 and equal exported-rate ties.
 Live model accuracy is a separate optional evaluation, not implied by this suite.
+
+Optional private JSONL evaluation records and the explicit live comparison runner
+are documented in [evaluation and assignment evidence](docs/evaluation.md), with a
+schema diagram, twelve-case reference harness, six additional demo examples, and
+an accurate record of browser-verification limitations. Set `evaluation_file` to a
+private path to enable recording; leave it absent to keep recording disabled.

@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jtoosh/baseball-mcp/internal/data"
 )
@@ -68,17 +69,28 @@ type Model interface {
 	Answer(context.Context, AnswerInput) (AnswerPresentation, error)
 }
 type QueryService struct {
-	DB      *Database
-	Model   Model
-	Config  Config
-	Logger  *log.Logger
-	pending pendingClarifications
+	DB       *Database
+	Model    Model
+	Config   Config
+	Logger   *log.Logger
+	Recorder *EvaluationRecorder
+	pending  pendingClarifications
 }
 
 func NewQueryService(db *Database, model Model, config Config, logger *log.Logger) *QueryService {
 	return &QueryService{DB: db, Model: model, Config: config, Logger: logger}
 }
-func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
+func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Outcome) {
+	if q.Recorder != nil {
+		record := &EvaluationRecord{Time: time.Now().UTC(), Question: req.Question}
+		ctx = context.WithValue(ctx, evaluationContextKey{}, record)
+		defer func() {
+			record.Outcome = outcome
+			if err := q.Recorder.write(record); err != nil {
+				q.logFailure("record evaluation", err)
+			}
+		}()
+	}
 	if strings.TrimSpace(req.Question) == "" || len(req.Question) > 4000 {
 		return Outcome{Kind: "error", Message: "Please enter a baseball statistics question of at most 4,000 characters."}
 	}
@@ -107,7 +119,7 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
 	// ambiguity, and an initial planning failure must not suppress the other.
 	for _, strategy := range strategies {
 		item := candidate{strategy: strategy}
-		plan, err := q.Model.Plan(ctx, inputFor(strategy))
+		plan, err := q.plan(ctx, inputFor(strategy))
 		if err != nil {
 			failure := q.strategyFailure(strategy, "interpret question", err)
 			item.failure = &failure
