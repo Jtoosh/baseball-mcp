@@ -117,39 +117,10 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
 	}
 	intent.Seasons = plan.Seasons
 	req.Interpretation = intent.Interpretation
-	if len(plan.Seasons) == 0 {
-		return q.failure("validate season", errors.New("model omitted season"))
-	}
-	for _, year := range plan.Seasons {
-		found := false
-		for _, available := range q.DB.Seasons {
-			if year == available {
-				found = true
-			}
-		}
-		if !found {
-			return q.failure("validate season", errors.New("model selected absent season"))
-		}
-	}
-	result, err := q.DB.Query(ctx, plan.SQL)
-	if err != nil {
-		return q.failure("execute query", err)
-	}
-	if result.Truncated {
-		return Outcome{Kind: "error", Message: "This question returned more than 500 rows. Please narrow your question."}
-	}
-	table, err := presentTable(result)
-	if err != nil {
-		return q.failure("format result", err)
-	}
-	answer, err := q.Model.Answer(ctx, AnswerInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: q.Config.DefaultStrategy, Seasons: plan.Seasons, Result: result})
-	if err != nil {
-		return q.failure("summarize result", err)
-	}
-	if !safePublicText(answer.Text) {
-		return q.failure("validate answer", errors.New("answer contained private details"))
-	}
-	return Outcome{Kind: "answer", Seasons: plan.Seasons, Strategies: []StrategyOutcome{{Strategy: q.Config.DefaultStrategy, Kind: "answer", Message: answer.Text, Table: table}}}
+	input.Interpretation = intent.Interpretation
+	strategy, seasons := q.executeStrategy(ctx, req, input, plan)
+	return Outcome{Kind: strategy.Kind, Seasons: seasons, Strategies: []StrategyOutcome{strategy}}
+
 }
 func (q *QueryService) failure(stage string, err error) Outcome {
 	if q.Logger != nil {
@@ -178,6 +149,37 @@ func safePublicText(text string) bool {
 	}
 	return true
 }
+
+// Native column origins identify stored metrics even when SQL chooses aliases.
+// Calculated values require explicit meanings from this small server catalog;
+// arbitrary SQL aliases never become public labels.
+func applyComputedMeasures(result *QueryResult, meanings []string) error {
+	for i, origin := range result.Origins {
+		if origin != "" {
+			continue
+		}
+		if len(meanings) != len(result.Columns) {
+			return errors.New("unknown calculated measure")
+		}
+		minimum := int64(0)
+		switch meanings[i] {
+		case "rank":
+			minimum = 1
+		case "player_count":
+		default:
+			return errors.New("unknown calculated measure")
+		}
+		for _, row := range result.Rows {
+			value, ok := row[i].(int64)
+			if !ok || value < minimum {
+				return errors.New("invalid calculated measure")
+			}
+		}
+		result.Origins[i] = meanings[i]
+	}
+	return nil
+}
+
 func presentTable(result QueryResult) (*PresentationTable, error) {
 	table := &PresentationTable{Rows: [][]string{}}
 	formats := make([]int, len(result.Columns))
@@ -186,6 +188,12 @@ func presentTable(result QueryResult) (*PresentationTable, error) {
 		case "name":
 			table.Columns = append(table.Columns, "Player")
 			formats[i] = -2
+		case "player_count":
+			table.Columns = append(table.Columns, "Players")
+			formats[i] = 0
+		case "rank":
+			table.Columns = append(table.Columns, "Rank")
+			formats[i] = 0
 		case "year":
 			table.Columns = append(table.Columns, "Season")
 			formats[i] = 0
