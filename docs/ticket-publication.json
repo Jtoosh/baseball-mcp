@@ -1,0 +1,116 @@
+{
+  "parent": "https://github.com/Jtoosh/baseball-mcp/issues/1",
+  "parent_body_sha256": "75eb85df9b9a36626418c5dfff42e3d01dd9ab72e5e12b99d822cf00a0aa763a",
+  "tickets": [
+    {
+      "draft_number": 1,
+      "number": 2,
+      "id": 5808186465,
+      "title": "Answer a player-season OPS question from the browser",
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/2",
+      "blocked_by_draft": []
+    },
+    {
+      "draft_number": 2,
+      "number": 3,
+      "id": 5808186740,
+      "title": "Answer MLB-wide leader and top-ten overlap questions",
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/3",
+      "blocked_by_draft": [
+        1
+      ]
+    },
+    {
+      "draft_number": 3,
+      "number": 4,
+      "id": 5808186975,
+      "title": "Confirm ambiguous questions and explain unsupported requests",
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/4",
+      "blocked_by_draft": [
+        1
+      ]
+    },
+    {
+      "draft_number": 4,
+      "number": 5,
+      "id": 5808187178,
+      "title": "Correct a failed query once and preserve clear failure outcomes",
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/5",
+      "blocked_by_draft": [
+        1
+      ]
+    },
+    {
+      "draft_number": 5,
+      "number": 6,
+      "id": 5808187471,
+      "title": "Answer partial results within the 500-row cap",
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/6",
+      "blocked_by_draft": [
+        1
+      ]
+    },
+    {
+      "draft_number": 6,
+      "number": 7,
+      "id": 5808187723,
+      "title": "Compare two prompting strategies for the same question",
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/7",
+      "blocked_by_draft": [
+        3,
+        4
+      ]
+    },
+    {
+      "draft_number": 7,
+      "number": 8,
+      "id": 5808188012,
+      "title": "Evaluate the complete browser workflow against reference answers",
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/8",
+      "blocked_by_draft": [
+        2,
+        5,
+        6
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "issue": 3,
+      "blocked_by": 2
+    },
+    {
+      "issue": 4,
+      "blocked_by": 2
+    },
+    {
+      "issue": 5,
+      "blocked_by": 2
+    },
+    {
+      "issue": 6,
+      "blocked_by": 2
+    },
+    {
+      "issue": 7,
+      "blocked_by": 4
+    },
+    {
+      "issue": 7,
+      "blocked_by": 5
+    },
+    {
+      "issue": 8,
+      "blocked_by": 3
+    },
+    {
+      "issue": 8,
+      "blocked_by": 6
+    },
+    {
+      "issue": 8,
+      "blocked_by": 7
+    }
+  ],
+  "verified": true
+}
