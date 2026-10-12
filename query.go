@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,8 @@ type QuestionRequest struct {
 	Question       string `json:"question"`
 	Confirmation   string `json:"confirmation,omitempty"`
 	Interpretation string `json:"interpretation,omitempty"`
+	Revision       string `json:"revision,omitempty"`
+	Choice         string `json:"choice,omitempty"`
 }
 type Outcome struct {
 	Kind         string            `json:"kind"`
@@ -25,6 +28,7 @@ type Outcome struct {
 	Seasons      []int             `json:"seasons,omitempty"`
 	Strategies   []StrategyOutcome `json:"strategies,omitempty"`
 	Confirmation string            `json:"confirmation,omitempty"`
+	Choices      []string          `json:"choices,omitempty"`
 }
 type StrategyOutcome struct {
 	Strategy string             `json:"strategy"`
@@ -38,16 +42,19 @@ type PresentationTable struct {
 	Rows    [][]string `json:"rows"`
 }
 type QueryPlan struct {
-	Status  string   `json:"status"`
-	SQL     string   `json:"sql"`
-	Message string   `json:"message"`
-	Seasons []int    `json:"seasons"`
-	Columns []string `json:"columns"`
+	Interpretation string   `json:"interpretation"`
+	Status         string   `json:"status"`
+	SQL            string   `json:"sql"`
+	Message        string   `json:"message"`
+	Seasons        []int    `json:"seasons"`
+	Columns        []string `json:"columns"`
 }
 type PlanInput struct {
 	Question, Interpretation, Strategy, Schema string
 	Seasons                                    []int
 	PreviousSQL, DatabaseError                 string
+	ResolvedIntent                             *ResolvedIntent
+	PlayerCandidates                           []data.PlayerCandidate
 }
 type AnswerInput struct {
 	Question, Interpretation, Strategy string
@@ -62,26 +69,54 @@ type Model interface {
 	Answer(context.Context, AnswerInput) (AnswerPresentation, error)
 }
 type QueryService struct {
-	DB     *Database
-	Model  Model
-	Config Config
-	Logger *log.Logger
+	DB      *Database
+	Model   Model
+	Config  Config
+	Logger  *log.Logger
+	pending pendingClarifications
 }
 
 func NewQueryService(db *Database, model Model, config Config, logger *log.Logger) *QueryService {
-	return &QueryService{db, model, config, logger}
+	return &QueryService{DB: db, Model: model, Config: config, Logger: logger}
 }
 func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
 	if strings.TrimSpace(req.Question) == "" || len(req.Question) > 4000 {
 		return Outcome{Kind: "error", Message: "Please enter a baseball statistics question of at most 4,000 characters."}
 	}
-	plan, err := q.Model.Plan(ctx, PlanInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: q.Config.DefaultStrategy, Schema: data.Schema(), Seasons: q.DB.Seasons})
+	req, intent, outcome := q.prepareQuestion(ctx, req)
+	if outcome != nil {
+		return *outcome
+	}
+	input := PlanInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: q.Config.DefaultStrategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent}
+	plan, err := q.Model.Plan(ctx, input)
 	if err != nil {
 		return q.failure("interpret question", err)
+	}
+	if plan.Status == "clarification" {
+		if !safePublicText(plan.Message) {
+			return q.failure("validate clarification", errors.New("private clarification"))
+		}
+		intent.Interpretation = plan.Message
+		intent.Seasons = plan.Seasons
+		return q.remember(req.Question, intent, nil)
+	}
+	if plan.Status == "unsupported" {
+		if !safePublicText(plan.Message) {
+			return q.failure("validate unsupported explanation", errors.New("private explanation"))
+		}
+		return Outcome{Kind: "unsupported", Message: plan.Message}
 	}
 	if plan.Status != "query" {
 		return q.failure("unsupported model plan", errors.New("expected query plan"))
 	}
+	if plan.Interpretation != "" {
+		intent.Interpretation = plan.Interpretation
+	}
+	if intent.Interpretation == "" {
+		intent.Interpretation = req.Question
+	}
+	intent.Seasons = plan.Seasons
+	req.Interpretation = intent.Interpretation
 	if len(plan.Seasons) == 0 {
 		return q.failure("validate season", errors.New("model omitted season"))
 	}
@@ -122,9 +157,13 @@ func (q *QueryService) failure(stage string, err error) Outcome {
 	}
 	return Outcome{Kind: "error", Message: "I couldn't answer that question. Please try again or ask a more specific baseball question."}
 }
+
+// Source identities are six-digit numbers, unlike the public season and age context.
+var privateIdentity = regexp.MustCompile(`\b[0-9]{6}\b`)
+
 func safePublicText(text string) bool {
 	lower := strings.ToLower(text)
-	if strings.TrimSpace(text) == "" {
+	if strings.TrimSpace(text) == "" || privateIdentity.MatchString(text) {
 		return false
 	}
 	for _, term := range []string{"select ", "create table", "sqlite", "player_id", "on_base_plus_slg", "database schema", "pragma ", "sql query"} {
