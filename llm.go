@@ -69,6 +69,9 @@ func (m *OpenAIModel) Plan(ctx context.Context, input PlanInput) (QueryPlan, err
 	if input.ResolvedIntent != nil {
 		prompt += fmt.Sprintf("\nConfirmed player identity (private): %d\nUser revision: %s", input.ResolvedIntent.PlayerID, input.ResolvedIntent.Revision)
 	}
+	if input.Strategy == StrategyExamples {
+		prompt += workedQueryExamples
+	}
 	instructions := domainInstructions + `Determine scope and whether meaningful interpretation remains unresolved BEFORE generating SQL. For ambiguous meaning such as best hitter, return status clarification, a natural-language best-guess message (for example highest OPS among qualifying MLB hitters), and EMPTY sql. A missing year alone is not ambiguous: default to latest available season. If a resolved interpretation is supplied, use it; a user revision overrides the pending interpretation and may require a new clarification. If the request is outside available batting scope (pitching, absent seasons, teams, AL/NL splits), return status unsupported and a helpful explanation based on the question and schema, with EMPTY sql and no schema details. Otherwise return status query. Put the resolved natural-language meaning in interpretation. A confirmed private player identity must be used to filter the lookup; do not expose it. For a query, generate exactly one SQLite SELECT or read-only WITH query over players and stats. Prefer direct selected columns so a server-owned catalog can present results. The columns array contains semantic meanings in selected order (not arbitrary SQL labels). Use rank for calculated dense ranks and player_count for calculated player counts. Those are the only supported calculated presentation measures; prefer stored columns for every exported metric. For status query return seasons, SQL, empty message. SQL may use IDs to filter and join but must not select IDs. Include season and plate appearances for direct lookups. Include player names where appropriate. Do not query SQLite metadata or administration facilities.`
 	if input.PreviousSQL != "" || input.DatabaseError != "" {
 		correction, err := json.Marshal(map[string]string{"previous_sql": input.PreviousSQL, "database_error": input.DatabaseError})
@@ -82,6 +85,17 @@ func (m *OpenAIModel) Plan(ctx context.Context, input PlanInput) (QueryPlan, err
 
 	return plan, err
 }
+
+// These training questions are distinct from the held-out reference questions.
+const workedQueryExamples = `
+Worked question/SQL examples:
+Question: Show Shohei Ohtani's walks in 2024.
+SQL: SELECT p.name,s.year,s.walk,s.pa FROM players p JOIN stats s ON p.player_id=s.player_id WHERE p.name='Ohtani, Shohei' AND s.year=2024
+Question: Show hitters with at least 25 doubles in 2025.
+SQL: SELECT p.name,s.year,s.double,s.pa FROM players p JOIN stats s ON p.player_id=s.player_id WHERE s.year=2025 AND s.double>=25 ORDER BY s.double DESC,p.name
+End of worked examples. Answer the actual Question at the start of the input, applying its resolved interpretation and all domain rules.
+`
+
 func (m *OpenAIModel) Answer(ctx context.Context, input AnswerInput) (AnswerPresentation, error) {
 	var answer AnswerPresentation
 	table, err := presentTable(input.Result)
