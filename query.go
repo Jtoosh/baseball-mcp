@@ -105,6 +105,37 @@ func safePublicText(text string) bool {
 	}
 	return true
 }
+
+// Native column origins identify stored metrics even when SQL chooses aliases.
+// Calculated values require explicit meanings from this small server catalog;
+// arbitrary SQL aliases never become public labels.
+func applyComputedMeasures(result *QueryResult, meanings []string) error {
+	for i, origin := range result.Origins {
+		if origin != "" {
+			continue
+		}
+		if len(meanings) != len(result.Columns) {
+			return errors.New("unknown calculated measure")
+		}
+		minimum := int64(0)
+		switch meanings[i] {
+		case "rank":
+			minimum = 1
+		case "player_count":
+		default:
+			return errors.New("unknown calculated measure")
+		}
+		for _, row := range result.Rows {
+			value, ok := row[i].(int64)
+			if !ok || value < minimum {
+				return errors.New("invalid calculated measure")
+			}
+		}
+		result.Origins[i] = meanings[i]
+	}
+	return nil
+}
+
 func presentTable(result QueryResult) (*PresentationTable, error) {
 	table := &PresentationTable{Rows: [][]string{}}
 	formats := make([]int, len(result.Columns))
@@ -113,6 +144,12 @@ func presentTable(result QueryResult) (*PresentationTable, error) {
 		case "name":
 			table.Columns = append(table.Columns, "Player")
 			formats[i] = -2
+		case "player_count":
+			table.Columns = append(table.Columns, "Players")
+			formats[i] = 0
+		case "rank":
+			table.Columns = append(table.Columns, "Rank")
+			formats[i] = 0
 		case "year":
 			table.Columns = append(table.Columns, "Season")
 			formats[i] = 0

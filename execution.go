@@ -34,6 +34,9 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		if result.Truncated {
 			return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: "This question returned more than 500 rows. Please narrow your question."}, plan.Seasons
 		}
+		if err := applyComputedMeasures(&result, plan.Columns); err != nil {
+			return q.strategyFailure(input.Strategy, "validate result measures", err), plan.Seasons
+		}
 		table, err := presentTable(result)
 		if err != nil {
 			return q.strategyFailure(input.Strategy, "format result", err), plan.Seasons
