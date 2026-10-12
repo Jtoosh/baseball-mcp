@@ -49,8 +49,11 @@ are available with baseball labels; exported rates are used without recalculatio
 
 Configuration changes take effect on restart. `database` selects the snapshot;
 `listen` defaults to localhost; `developer_log` defaults to the private
-`.private/developer.log` file. This initial slice supports the `schema` prompting
-strategy; comparison and worked-example prompting are delivered by later tickets.
+`.private/developer.log` file. Set `default_strategy` to `schema` (schema and instructions) or `examples`
+(the same context plus worked question/SQL examples). Set `comparison_mode` to
+`true` to run both automatically. Comparison resolves an ambiguous question once,
+then shows independent labelled answers. A failure in one strategy preserves the
+other result. The model and dataset are held constant.
 Private logs and local configuration are ignored by Git and are never static
 assets. Keep these artifacts outside any externally configured file server.
 

@@ -82,44 +82,115 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
 	if strings.TrimSpace(req.Question) == "" || len(req.Question) > 4000 {
 		return Outcome{Kind: "error", Message: "Please enter a baseball statistics question of at most 4,000 characters."}
 	}
-	req, intent, outcome := q.prepareQuestion(ctx, req)
-	if outcome != nil {
-		return *outcome
+	req, intent, pending := q.prepareQuestion(ctx, req)
+	if pending != nil {
+		return *pending
 	}
-	input := PlanInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: q.Config.DefaultStrategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent}
-	plan, err := q.Model.Plan(ctx, input)
-	if err != nil {
-		return q.failure("interpret question", err)
-	}
-	if plan.Status == "clarification" {
-		if !q.safePublicText(plan.Message) {
-			return q.failure("validate clarification", errors.New("private clarification"))
+	strategies := []string{q.Config.DefaultStrategy}
+	if q.Config.ComparisonMode {
+		other := StrategyExamples
+		if strategies[0] == StrategyExamples {
+			other = StrategySchema
 		}
-		intent.Interpretation = plan.Message
-		intent.Seasons = plan.Seasons
-		return q.remember(req.Question, intent, nil)
+		strategies = append(strategies, other)
 	}
-	if plan.Status == "unsupported" {
-		if !q.safePublicText(plan.Message) {
-			return q.failure("validate unsupported explanation", errors.New("private explanation"))
+	type candidate struct {
+		strategy string
+		plan     QueryPlan
+		failure  *StrategyOutcome
+	}
+	candidates := make([]candidate, 0, len(strategies))
+	inputFor := func(strategy string) PlanInput {
+		return PlanInput{Question: req.Question, Interpretation: intent.Interpretation, Strategy: strategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent}
+	}
+	// Resolve all strategy plans before executing any: either can identify an
+	// ambiguity, and an initial planning failure must not suppress the other.
+	for _, strategy := range strategies {
+		item := candidate{strategy: strategy}
+		plan, err := q.Model.Plan(ctx, inputFor(strategy))
+		if err != nil {
+			failure := q.strategyFailure(strategy, "interpret question", err)
+			item.failure = &failure
+			candidates = append(candidates, item)
+			continue
 		}
-		return Outcome{Kind: "unsupported", Message: plan.Message}
+		switch plan.Status {
+		case "clarification":
+			if !q.safePublicText(plan.Message) {
+				return q.failure("validate clarification", errors.New("private clarification"))
+			}
+			intent.Interpretation = plan.Message
+			intent.Seasons = plan.Seasons
+			return q.remember(req.Question, intent, nil)
+		case "unsupported":
+			if !q.safePublicText(plan.Message) {
+				return q.failure("validate unsupported explanation", errors.New("private explanation"))
+			}
+			if !q.Config.ComparisonMode {
+				return Outcome{Kind: "unsupported", Message: plan.Message}
+			}
+			failure := StrategyOutcome{Strategy: strategy, Kind: "unsupported", Message: plan.Message}
+			item.failure = &failure
+		case "query":
+			err = q.validateSeasons(plan.Seasons)
+			if err == nil && len(intent.Seasons) > 0 && !sameSeasons(intent.Seasons, plan.Seasons) {
+				err = errors.New("strategy changed the resolved seasons")
+			}
+			if err != nil {
+				failure := q.strategyFailure(strategy, "validate season", err)
+				item.failure = &failure
+				break
+			}
+			if intent.Interpretation == "" {
+				intent.Interpretation = plan.Interpretation
+				if intent.Interpretation == "" {
+					intent.Interpretation = req.Question
+				}
+			}
+			intent.Seasons = plan.Seasons
+			item.plan = plan
+		default:
+			failure := q.strategyFailure(strategy, "validate query plan", errors.New("unknown plan status"))
+			item.failure = &failure
+		}
+		candidates = append(candidates, item)
 	}
-	if plan.Status != "query" {
-		return q.failure("unsupported model plan", errors.New("expected query plan"))
-	}
-	if plan.Interpretation != "" {
-		intent.Interpretation = plan.Interpretation
-	}
-	if intent.Interpretation == "" {
-		intent.Interpretation = req.Question
-	}
-	intent.Seasons = plan.Seasons
 	req.Interpretation = intent.Interpretation
-	input.Interpretation = intent.Interpretation
-	strategy, seasons := q.executeStrategy(ctx, req, input, plan)
-	return Outcome{Kind: strategy.Kind, Seasons: seasons, Strategies: []StrategyOutcome{strategy}}
+	out := Outcome{Kind: "unsupported", Seasons: intent.Seasons}
+	for _, item := range candidates {
+		var result StrategyOutcome
+		if item.failure != nil {
+			result = *item.failure
+		} else {
+			result, _ = q.executeStrategy(ctx, req, inputFor(item.strategy), item.plan)
+		}
+		out.Strategies = append(out.Strategies, result)
+		if result.Kind == "answer" {
+			out.Kind = "answer"
+		} else if result.Kind == "error" && out.Kind != "answer" {
+			out.Kind = "error"
+		}
+	}
+	return out
+}
 
+func sameSeasons(a, b []int) bool {
+	left, right := map[int]bool{}, map[int]bool{}
+	for _, year := range a {
+		left[year] = true
+	}
+	for _, year := range b {
+		right[year] = true
+	}
+	if len(left) != len(right) {
+		return false
+	}
+	for year := range left {
+		if !right[year] {
+			return false
+		}
+	}
+	return true
 }
 func (q *QueryService) failure(stage string, err error) Outcome {
 	if q.Logger != nil {

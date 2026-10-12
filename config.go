@@ -36,11 +36,8 @@ func LoadConfig(path string) (Config, error) {
 	if c.Model == "" {
 		return c, errors.New("configure a model identifier")
 	}
-	if c.DefaultStrategy != StrategySchema {
-		return c, errors.New("only schema strategy is currently supported")
-	}
-	if c.ComparisonMode {
-		return c, errors.New("comparison mode is not yet supported")
+	if c.DefaultStrategy != StrategySchema && c.DefaultStrategy != StrategyExamples {
+		return c, errors.New("default_strategy must be schema or examples")
 	}
 	return c, nil
 }

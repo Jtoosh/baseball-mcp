@@ -33,7 +33,9 @@ func main() {
 	}
 	defer db.Close()
 	service := NewQueryService(db, NewOpenAIModel(config.Model), config, log.New(file, "", log.LstdFlags))
-	server := http.Server{Addr: config.Listen, Handler: NewHandler(service), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 150 * time.Second}
+	// Two strategies can each spend 60s planning, 60s correcting, 60s
+	// summarizing, and 20s executing. Leave room for the bounded full workflow.
+	server := http.Server{Addr: config.Listen, Handler: NewHandler(service), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 8 * time.Minute}
 	log.Printf("Listening at http://%s", config.Listen)
 	log.Fatal(server.ListenAndServe())
 }
