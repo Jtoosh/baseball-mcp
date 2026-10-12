@@ -23,24 +23,27 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		result, err := q.DB.Query(executionCtx, plan.SQL)
 		cancel()
 		q.recordExecution(ctx, input.Strategy, plan.SQL, result, err != nil)
+		stage := "execute query"
+		var table *PresentationTable
+		if err == nil {
+			stage = "validate result measures"
+			err = applyComputedMeasures(&result, plan.Columns)
+		}
+		if err == nil {
+			stage = "format result"
+			table, err = presentTable(result)
+		}
 		if err != nil {
-			q.logFailure("execute query ("+input.Strategy+")", err)
+			q.logFailure(stage+" ("+input.Strategy+")", err)
 			if attempt == 1 {
 				return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: questionFailureMessage}, plan.Seasons
 			}
-			input.PreviousSQL, input.DatabaseError = plan.SQL, err.Error()
+			input.PreviousSQL, input.DatabaseError = plan.SQL, stage+": "+err.Error()
 			plan, err = q.plan(ctx, input)
 			if err != nil {
 				return q.strategyFailure(input.Strategy, "correct query", err), nil
 			}
 			continue
-		}
-		if err := applyComputedMeasures(&result, plan.Columns); err != nil {
-			return q.strategyFailure(input.Strategy, "validate result measures", err), plan.Seasons
-		}
-		table, err := presentTable(result)
-		if err != nil {
-			return q.strategyFailure(input.Strategy, "format result", err), plan.Seasons
 		}
 		answer, err := q.answer(ctx, AnswerInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: input.Strategy, Seasons: plan.Seasons, Result: result})
 		if err != nil {

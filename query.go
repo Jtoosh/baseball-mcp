@@ -261,7 +261,7 @@ func applyComputedMeasures(result *QueryResult, meanings []string) error {
 			continue
 		}
 		if len(meanings) != len(result.Columns) {
-			return errors.New("unknown calculated measure")
+			return fmt.Errorf("unknown calculated measure at output column %d: missing source origin; got %d meanings for %d columns; select stored columns directly, or label calculations rank/player_count", i+1, len(meanings), len(result.Columns))
 		}
 		minimum := int64(0)
 		switch meanings[i] {
@@ -269,7 +269,7 @@ func applyComputedMeasures(result *QueryResult, meanings []string) error {
 			minimum = 1
 		case "player_count":
 		default:
-			return errors.New("unknown calculated measure")
+			return fmt.Errorf("unknown calculated measure at output column %d: missing source origin; only rank/player_count calculations are supported; select stored names, seasons and metrics directly without formatting or aggregates", i+1)
 		}
 		for _, row := range result.Rows {
 			value, ok := row[i].(int64)
