@@ -28,6 +28,25 @@ Open <http://127.0.0.1:8080> and ask, for example, “What was Luis Vázquez's O
 2025?” The supplied snapshot records OPS 0.448 over 53 plate appearances. The
 “Show supporting results” switch hides or reveals the friendly result table.
 
+Try the browser's example questions for MLB-wide leaders, dense-rank ties,
+three-way top-ten overlap, and advanced metrics:
+
+- “Who led MLB in home runs in 2024, 2025, and 2026?” returns Aaron Judge (58),
+  Cal Raleigh (60), and both Kyle Schwarber and Pete Crow-Armstrong (45).
+- “Who led MLB in OPS?” defaults to the latest imported season, 2026, and returns
+  Yordan Alvarez at the exported 1.035 over 691 plate appearances.
+- “Which qualifying players share tenth place by dense rank for home runs in
+  2024?” includes Pete Alonso and Cal Raleigh, both with 34.
+- “Is any qualifying player in the top ten for HR, 1B, and 2B in 2026?” has no
+  matches. That is a normal answer: 1B means singles and 2B means doubles.
+- “What was Alec Bohm's average best speed in 2024?” preserves 100.768220847.
+
+Rankings filter to at least 502 plate appearances before computing dense ranks.
+Top-ten results include every tie at tenth, and overlap questions require players
+to appear in every requested ranking within the same season. Direct lookups also
+include nonqualifying players and their plate appearances. All imported metrics
+are available with baseball labels; exported rates are used without recalculation.
+
 Configuration changes take effect on restart. `database` selects the snapshot;
 `listen` defaults to localhost; `developer_log` defaults to the private
 `.private/developer.log` file. This initial slice supports the `schema` prompting
@@ -69,4 +88,8 @@ controlled model responses. A local OpenAI HTTP stub exercises the real Go SDK
 without reading a key or making a paid call. It checks the verified OPS value,
 qualification-independent lookup, imported coverage and precision, SQL restrictions,
 read-only CTEs, deadlines, row caps, private routes, and failure presentation.
+Ranking HTTP tests compare the held-out reference literals for season leaders,
+OPS, dense-rank tenth-place ties, qualifying counts, and normal empty overlaps.
+A controlled CSV fixture checks exclusion of a high-stat nonqualifying player
+and equal exported-rate ties.
 Live model accuracy is a separate optional evaluation, not implied by this suite.
