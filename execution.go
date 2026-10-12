@@ -42,7 +42,7 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		if err != nil {
 			return q.strategyFailure(input.Strategy, "summarize result", err), plan.Seasons
 		}
-		if !safePublicText(answer.Text) {
+		if !q.safePublicText(answer.Text) {
 			return q.strategyFailure(input.Strategy, "validate answer", errors.New("answer contained private details")), plan.Seasons
 		}
 		if result.Truncated {
