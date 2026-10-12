@@ -31,3 +31,11 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local snapshot, credentials and private developer records
+mlb.db
+mlb.db-*
+config.json
+.private/
+.env.*
+baseball-mcp
