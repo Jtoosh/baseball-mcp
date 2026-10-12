@@ -72,8 +72,11 @@ read-only and permits one SELECT or read-only CTE over the baseball tables. SQLi
 itself validates statement boundaries; an authorizer rejects metadata,
 administrative operations, writes, and unapproved functions. Each execution has a
 ten-second deadline. Result tables and model inputs never contain more than 500
-rows. This first slice asks the user to narrow an oversized question; the planned
-partial-answer slice will preserve an explicitly partial answer.
+rows. Oversized results produce a partial answer based on the first 500 matching
+rows and ask the user to narrow the question. The overflow-detection row never
+reaches the model or browser. Counts, aggregates, and rankings still consider all
+relevant database records; the cap applies only to returned results. Exactly 500
+rows and no-match results remain normal answers.
 
 ## Verify
 

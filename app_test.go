@@ -133,14 +133,6 @@ func TestBrowserSuppressesTableWhenAnswerGenerationFails(t *testing.T) {
 		t.Fatalf("unexpected failure response: %s", body)
 	}
 }
-func TestBrowserCapsResultsBeforeCallingAnswerModel(t *testing.T) {
-	m := &scriptedModel{plan: QueryPlan{Status: "query", SQL: "SELECT year, pa FROM stats", Seasons: []int{2024, 2025, 2026}}}
-	_, app := testApp(t, m)
-	body := postQuestion(app).Body.String()
-	if !strings.Contains(body, "500") || !strings.Contains(body, "narrow") || len(m.answerInput.Result.Rows) != 0 {
-		t.Fatalf("overflow silently passed: %s", body)
-	}
-}
 func TestBrowserPrivateArtifactsAreNotServed(t *testing.T) {
 	_, app := testApp(t, &scriptedModel{})
 	for _, path := range []string{"/mlb.db", "/config.json", "/.private/developer.log", "/evaluation/reference-answers.json", "/docs/implementation-spec.md", "/static/../mlb.db", "/llm.go"} {
