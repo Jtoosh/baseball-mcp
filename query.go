@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -93,7 +92,7 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
 		return q.failure("interpret question", err)
 	}
 	if plan.Status == "clarification" {
-		if !safePublicText(plan.Message) {
+		if !q.safePublicText(plan.Message) {
 			return q.failure("validate clarification", errors.New("private clarification"))
 		}
 		intent.Interpretation = plan.Message
@@ -101,7 +100,7 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
 		return q.remember(req.Question, intent, nil)
 	}
 	if plan.Status == "unsupported" {
-		if !safePublicText(plan.Message) {
+		if !q.safePublicText(plan.Message) {
 			return q.failure("validate unsupported explanation", errors.New("private explanation"))
 		}
 		return Outcome{Kind: "unsupported", Message: plan.Message}
@@ -129,12 +128,13 @@ func (q *QueryService) failure(stage string, err error) Outcome {
 	return Outcome{Kind: "error", Message: "I couldn't answer that question. Please try again or ask a more specific baseball question."}
 }
 
-// Source identities are six-digit numbers, unlike the public season and age context.
-var privateIdentity = regexp.MustCompile(`\b[0-9]{6}\b`)
+func (q *QueryService) safePublicText(text string) bool {
+	return safePublicText(text) && !q.DB.ContainsPlayerIdentity(text)
+}
 
 func safePublicText(text string) bool {
 	lower := strings.ToLower(text)
-	if strings.TrimSpace(text) == "" || privateIdentity.MatchString(text) {
+	if strings.TrimSpace(text) == "" {
 		return false
 	}
 	for _, term := range []string{"select ", "create table", "sqlite", "player_id", "on_base_plus_slg", "database schema", "pragma ", "sql query"} {

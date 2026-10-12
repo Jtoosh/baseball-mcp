@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/ncruces/go-sqlite3"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -51,4 +52,17 @@ func (d *Database) AmbiguousPlayers(ctx context.Context, question string) ([]Pla
 		candidates = append(candidates, PlayerCandidate{ID: id, Name: name, Seasons: []PlayerSeasonDescription{season}, Description: fmt.Sprintf("%s — age %d in %d, %d plate appearances", name, stmt.ColumnInt(3), stmt.ColumnInt(2), stmt.ColumnInt(4))})
 	}
 	return candidates, stmt.Err()
+}
+
+var identityTokens = regexp.MustCompile(`\b[0-9]+\b`)
+
+// ContainsPlayerIdentity checks actual private source identities, allowing
+// unrelated public counts and source-precision numbers to remain readable.
+func (d *Database) ContainsPlayerIdentity(text string) bool {
+	for _, token := range identityTokens.FindAllString(text, -1) {
+		if _, ok := d.playerIDs[token]; ok {
+			return true
+		}
+	}
+	return false
 }
