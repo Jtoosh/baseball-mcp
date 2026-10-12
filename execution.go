@@ -31,9 +31,6 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 			}
 			continue
 		}
-		if result.Truncated {
-			return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: "This question returned more than 500 rows. Please narrow your question."}, plan.Seasons
-		}
 		if err := applyComputedMeasures(&result, plan.Columns); err != nil {
 			return q.strategyFailure(input.Strategy, "validate result measures", err), plan.Seasons
 		}
@@ -48,7 +45,10 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		if !q.safePublicText(answer.Text) {
 			return q.strategyFailure(input.Strategy, "validate answer", errors.New("answer contained private details")), plan.Seasons
 		}
-		return StrategyOutcome{Strategy: input.Strategy, Kind: "answer", Message: answer.Text, Table: table}, plan.Seasons
+		if result.Truncated {
+			answer.Text = "This is a partial answer based only on the first 500 matching rows. " + answer.Text + " Please narrow your question for a complete result."
+		}
+		return StrategyOutcome{Strategy: input.Strategy, Kind: "answer", Message: answer.Text, Table: table, Partial: result.Truncated}, plan.Seasons
 	}
 	return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: questionFailureMessage}, nil
 }

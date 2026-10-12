@@ -92,6 +92,6 @@ func (m *OpenAIModel) Answer(ctx context.Context, input AnswerInput) (AnswerPres
 	if err != nil {
 		return answer, err
 	}
-	err = m.structured(ctx, "answer", domainInstructions+`Write a concise answer based only on the supplied result table, question and season context. Include plate appearances for nonranking player lookups. Empty results are a normal no-matches outcome. Do not invent values. Mention that results reflect imported snapshots.`, string(payload), objectSchema(map[string]any{"text": map[string]any{"type": "string"}}), &answer)
+	err = m.structured(ctx, "answer", domainInstructions+`Write a concise answer based only on the supplied result table, question and season context. Include plate appearances for nonranking player lookups. Empty results are a normal no-matches outcome. When partial is true, the table contains only the first 500 matching rows: explicitly limit every claim to that returned portion, identify the answer as partial, and ask the user to narrow the question. Do not infer totals or coverage beyond the supplied portion. Do not invent values. Mention that results reflect imported snapshots.`, string(payload), objectSchema(map[string]any{"text": map[string]any{"type": "string"}}), &answer)
 	return answer, err
 }

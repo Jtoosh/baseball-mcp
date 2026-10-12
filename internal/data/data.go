@@ -287,7 +287,10 @@ func (d *Database) Query(ctx context.Context, sql string) (Result, error) {
 		case sqlite3.AUTH_SELECT, sqlite3.AUTH_RECURSIVE:
 			return sqlite3.AUTH_OK
 		case sqlite3.AUTH_READ:
-			if db == "main" && (x == "players" || x == "stats") {
+			// SQLite's COUNT(*) table read has no column or database name.
+			// No attached databases are permitted, so this still identifies
+			// only a permitted table in the serving snapshot.
+			if (db == "main" || (db == "" && y == "")) && (x == "players" || x == "stats") {
 				return sqlite3.AUTH_OK
 			}
 		case sqlite3.AUTH_FUNCTION:
