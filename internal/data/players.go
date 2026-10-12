@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ncruces/go-sqlite3"
 	"strings"
+	"time"
 )
 
 // PlayerCandidate describes a distinct same-name player using source statistics.
@@ -22,7 +23,7 @@ func (d *Database) AmbiguousPlayers(ctx context.Context, question string) ([]Pla
 		return nil, err
 	}
 	defer c.Close()
-	ctx, cancel := context.WithTimeout(ctx, d.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	c.SetInterrupt(ctx)
 	stmt, _, err := c.Prepare(`SELECT p.player_id,p.name,s.year,s.player_age,s.pa FROM players p JOIN stats s ON s.player_id=p.player_id WHERE p.name IN (SELECT name FROM players GROUP BY name HAVING count(*)>1) ORDER BY p.player_id,s.year DESC`)
