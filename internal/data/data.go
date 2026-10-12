@@ -217,9 +217,10 @@ func Import(source, path string) (err error) {
 }
 
 type Database struct {
-	path    string
-	Seasons []int
-	Timeout time.Duration
+	path      string
+	Seasons   []int
+	Timeout   time.Duration
+	playerIDs map[string]struct{}
 }
 type Result struct {
 	Columns   []string
@@ -253,7 +254,19 @@ func Open(path string) (*Database, error) {
 	if len(seasons) == 0 {
 		return nil, errors.New("empty database")
 	}
-	return &Database{abs, seasons, 10 * time.Second}, nil
+	identities, _, err := c.Prepare("SELECT player_id FROM players")
+	if err != nil {
+		return nil, err
+	}
+	defer identities.Close()
+	playerIDs := map[string]struct{}{}
+	for identities.Step() {
+		playerIDs[strconv.FormatInt(identities.ColumnInt64(0), 10)] = struct{}{}
+	}
+	if err := identities.Err(); err != nil {
+		return nil, err
+	}
+	return &Database{path: abs, Seasons: seasons, Timeout: 10 * time.Second, playerIDs: playerIDs}, nil
 }
 func (d *Database) Close() error { return nil }
 func (d *Database) Query(ctx context.Context, sql string) (Result, error) {
