@@ -11,9 +11,9 @@ function render(data,question){
    for(const choice of data.choices){const button=document.createElement('button');button.type='button';button.textContent=choice;button.addEventListener('click',()=>ask({question,confirmation:data.confirmation,choice}));const row=document.createElement('p');row.append(button);panel.append(row)}
   }else{
    const confirm=document.createElement('button');confirm.type='button';confirm.id='confirm';confirm.textContent='Confirm interpretation';confirm.addEventListener('click',()=>ask({question,confirmation:data.confirmation}));panel.append(confirm);
+  }
    const revisionForm=document.createElement('form'),label=document.createElement('label'),revision=document.createElement('textarea');label.textContent='Revise the interpretation';revision.id='revision';revision.rows=2;revision.maxLength=4000;revision.required=true;label.append(revision);revisionForm.append(label);
    const revise=document.createElement('button');revise.type='submit';revise.textContent='Use revision';revisionForm.append(revise);revisionForm.addEventListener('submit',e=>{e.preventDefault();ask({question,confirmation:data.confirmation,revision:revision.value})});panel.append(revisionForm);
-  }
   results.append(panel);
  }
  for(const outcome of data.strategies||[]){

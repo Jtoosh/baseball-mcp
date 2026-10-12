@@ -66,3 +66,33 @@ func (d *Database) ContainsPlayerIdentity(text string) bool {
 	}
 	return false
 }
+
+// MentionsPlayer distinguishes a newly named player from a revision that still
+// needs the pending same-name candidates (for example, "the player age 23").
+func (d *Database) MentionsPlayer(ctx context.Context, question string) (bool, error) {
+	c, err := sqlite3.OpenFlags(d.path, sqlite3.OPEN_READONLY)
+	if err != nil {
+		return false, err
+	}
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	c.SetInterrupt(ctx)
+	stmt, _, err := c.Prepare("SELECT name FROM players")
+	if err != nil {
+		return false, err
+	}
+	defer stmt.Close()
+	lower := strings.ToLower(question)
+	for stmt.Step() {
+		name := stmt.ColumnText(0)
+		parts := strings.SplitN(name, ", ", 2)
+		if len(parts) == 2 {
+			name = parts[1] + " " + parts[0]
+		}
+		if strings.Contains(lower, strings.ToLower(name)) {
+			return true, nil
+		}
+	}
+	return false, stmt.Err()
+}

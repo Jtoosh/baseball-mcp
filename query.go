@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -205,22 +206,40 @@ func sameSeasons(a, b []int) bool {
 	return true
 }
 func (q *QueryService) failure(stage string, err error) Outcome {
-	if q.Logger != nil {
-		q.Logger.Printf("%s: %v", stage, err)
-	}
-	return Outcome{Kind: "error", Message: "I couldn't answer that question. Please try again or ask a more specific baseball question."}
+	q.logFailure(stage, err)
+	return Outcome{Kind: "error", Message: questionFailureMessage}
 }
 
 func (q *QueryService) safePublicText(text string) bool {
 	return safePublicText(text) && !q.DB.ContainsPlayerIdentity(text)
 }
 
+// SQL comments are separators too. Inspect normalized syntax while preserving
+// normal baseball phrases such as "select a season" or "this results table".
+var sqlComments = regexp.MustCompile(`(?s)/\*.*?\*/|--[^\r\n]*`)
+var privateSyntax = regexp.MustCompile(`(?i)\b(?:` + strings.Join([]string{
+	`select\b[^.;]*\bfrom`,
+	`select\s+(?:[0-9*\x27"\x60]|(?:distinct|name|year|pa)\b|\w+\s*\()`,
+	`with\b[^.;]*\bas\s*\(`,
+	`insert\s+into|delete\s+from|update\s+\w+\s+set`,
+	`(?:create|drop|alter)\s+(?:virtual\s+)?(?:table|index|view|trigger)`,
+	`pragma\b|attach\s+database|detach\s+database|explain\s+(?:query|select)`,
+	`(?:database|db)\b[^.;]*\b(?:schema|tables?|columns?)`,
+	`(?:players|stats)\s+table|tables?\s+[\x60"\[]?(?:players|stats)`,
+	`(?:column|field)\s+[\x60"\[]?(?:name|year|pa|player_id)\b|(?:name|year|pa)\s+column`,
+	`foreign\s+key|primary\s+key|(?:players|stats)\s*\.\s*\w+`,
+}, "|") + `)`)
+
 func safePublicText(text string) bool {
 	lower := strings.ToLower(text)
+	normalized := sqlComments.ReplaceAllString(lower, " ")
+	if privateSyntax.MatchString(normalized) || privateSyntax.MatchString(lower) || strings.Contains(lower, "```sql") {
+		return false
+	}
 	if strings.TrimSpace(text) == "" {
 		return false
 	}
-	for _, term := range []string{"select ", "create table", "sqlite", "player_id", "on_base_plus_slg", "database schema", "pragma ", "sql query"} {
+	for _, term := range []string{"sqlite", "player_id", "on_base_plus_slg", "schema", "sql query"} {
 		if strings.Contains(lower, term) {
 			return false
 		}

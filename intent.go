@@ -35,6 +35,7 @@ type pendingClarifications struct {
 func (q *QueryService) prepareQuestion(ctx context.Context, req QuestionRequest) (QuestionRequest, ResolvedIntent, *Outcome) {
 	req.Question = strings.TrimSpace(req.Question)
 	var intent ResolvedIntent
+	var previousPlayers []data.PlayerCandidate
 	bad := func(message string) (QuestionRequest, ResolvedIntent, *Outcome) {
 		o := Outcome{Kind: "error", Message: message}
 		return req, intent, &o
@@ -65,6 +66,7 @@ func (q *QueryService) prepareQuestion(ctx context.Context, req QuestionRequest)
 		} else {
 			intent = p.intent
 		}
+		previousPlayers = p.players
 		delete(q.pending.items, req.Confirmation)
 		q.pending.Unlock()
 		if strings.TrimSpace(req.Revision) != "" {
@@ -76,17 +78,31 @@ func (q *QueryService) prepareQuestion(ctx context.Context, req QuestionRequest)
 			return req, intent, nil
 		}
 	}
-	candidates, err := q.DB.AmbiguousPlayers(ctx, req.Question)
+	identityQuestion := req.Question
+	if intent.Revision != "" {
+		identityQuestion = intent.Revision
+	}
+	candidates, err := q.DB.AmbiguousPlayers(ctx, identityQuestion)
 	if err != nil {
 		o := q.failure("identify player", err)
 		return req, intent, &o
+	}
+	if len(candidates) == 0 && len(previousPlayers) > 1 {
+		namedPlayer, err := q.DB.MentionsPlayer(ctx, identityQuestion)
+		if err != nil {
+			o := q.failure("identify revised player", err)
+			return req, intent, &o
+		}
+		if !namedPlayer {
+			candidates = previousPlayers
+		}
 	}
 	if len(candidates) > 1 {
 		matches := map[int64]data.PlayerCandidate{}
 		for _, candidate := range candidates {
 			for _, season := range candidate.Seasons {
 				agePattern := regexp.MustCompile(fmt.Sprintf(`(?i)\bage\s+%d\b|\b%d[- ]year[- ]old\b`, season.Age, season.Age))
-				if agePattern.MatchString(req.Question) {
+				if agePattern.MatchString(identityQuestion) {
 					matches[candidate.ID] = candidate
 				}
 			}
