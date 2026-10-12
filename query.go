@@ -79,45 +79,8 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) Outcome {
 	if err != nil {
 		return q.failure("interpret question", err)
 	}
-	if plan.Status != "query" {
-		return q.failure("unsupported model plan", errors.New("expected query plan"))
-	}
-	if len(plan.Seasons) == 0 {
-		return q.failure("validate season", errors.New("model omitted season"))
-	}
-	for _, year := range plan.Seasons {
-		found := false
-		for _, available := range q.DB.Seasons {
-			if year == available {
-				found = true
-			}
-		}
-		if !found {
-			return q.failure("validate season", errors.New("model selected absent season"))
-		}
-	}
-	result, err := q.DB.Query(ctx, plan.SQL)
-	if err != nil {
-		return q.failure("execute query", err)
-	}
-	if result.Truncated {
-		return Outcome{Kind: "error", Message: "This question returned more than 500 rows. Please narrow your question."}
-	}
-	if err := applyComputedMeasures(&result, plan.Columns); err != nil {
-		return q.failure("validate result measures", err)
-	}
-	table, err := presentTable(result)
-	if err != nil {
-		return q.failure("format result", err)
-	}
-	answer, err := q.Model.Answer(ctx, AnswerInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: q.Config.DefaultStrategy, Seasons: plan.Seasons, Result: result})
-	if err != nil {
-		return q.failure("summarize result", err)
-	}
-	if !safePublicText(answer.Text) {
-		return q.failure("validate answer", errors.New("answer contained private details"))
-	}
-	return Outcome{Kind: "answer", Seasons: plan.Seasons, Strategies: []StrategyOutcome{{Strategy: q.Config.DefaultStrategy, Kind: "answer", Message: answer.Text, Table: table}}}
+	strategy, seasons := q.executeStrategy(ctx, req, PlanInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: q.Config.DefaultStrategy, Schema: data.Schema(), Seasons: q.DB.Seasons}, plan)
+	return Outcome{Kind: strategy.Kind, Seasons: seasons, Strategies: []StrategyOutcome{strategy}}
 }
 func (q *QueryService) failure(stage string, err error) Outcome {
 	if q.Logger != nil {

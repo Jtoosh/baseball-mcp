@@ -67,6 +67,14 @@ func (m *OpenAIModel) Plan(ctx context.Context, input PlanInput) (QueryPlan, err
 	}
 	prompt := fmt.Sprintf("Question: %s\nResolved interpretation: %s\nAvailable seasons: %v\nSchema:\n%s\nMetric meanings:\n%s", input.Question, input.Interpretation, input.Seasons, input.Schema, strings.Join(labels, "\n"))
 	instructions := domainInstructions + `Generate exactly one SQLite SELECT or read-only WITH query over players and stats. Prefer direct selected columns so a server-owned catalog can present results. The columns array contains semantic meanings in selected order (not arbitrary SQL labels). Use rank for calculated dense ranks and player_count for calculated player counts. Those are the only supported calculated presentation measures; prefer stored columns for every exported metric. Return status query, seasons, SQL, empty message. SQL may use IDs to filter and join but must not select IDs. Include season and plate appearances for direct lookups. Include player names where appropriate. Do not query SQLite metadata or administration facilities.`
+	if input.PreviousSQL != "" || input.DatabaseError != "" {
+		correction, err := json.Marshal(map[string]string{"previous_sql": input.PreviousSQL, "database_error": input.DatabaseError})
+		if err != nil {
+			return plan, err
+		}
+		prompt += "\nPrivate correction context:\n" + string(correction)
+		instructions += ` Correct the failed query using the private diagnostic context. Keep the same resolved baseball question and seasons. Return one permitted read query. Never repeat SQL or diagnostic details in natural-language text.`
+	}
 	err := m.structured(ctx, "query_plan", instructions, prompt, objectSchema(map[string]any{"status": map[string]any{"type": "string", "enum": []string{"query"}}, "sql": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"}, "seasons": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "columns": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}), &plan)
 	return plan, err
 }
