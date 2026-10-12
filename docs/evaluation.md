@@ -80,6 +80,9 @@ go test -v -run '^TestLiveReferenceEvaluation$' . -args -live-config /absolute/p
 ```
 
 The runner uses the configured model and database with both prompting strategies.
+Its reference values apply only to a database imported from the checksum-identified
+CSV above. The runner does not verify database provenance; independently confirm
+that the configured database is this fixed import before interpreting its report.
 It does not run when the config flag is absent. It writes private event records
 and a separate `.review.jsonl` report pairing each reference with the actual public
 outcome. Compare retrieved values against reference player identity, season,
@@ -116,16 +119,16 @@ error without a table; rejected queries get one correction and then stop. Asking
 about pitchers, teams, postseason or unavailable seasons should explain the
 available scope. A best-hitter question proposes a metric before execution.
 
-## Browser verification evidence and limitation
+## Browser verification evidence
 
-The native browser host has been unreliable in this environment. Earlier controlled
-browser checks covered submission, default-season text, friendly statistics,
-table visibility, interpretation confirmation, revision and error presentation.
-The final native browser preview timed out; comparison DOM verification remains
-unverified. HTTP comparison tests verify independently labelled outcomes and
-retention of a successful strategy. They do not substitute for the missing browser
-check. Final manual verification should run the app locally, submit examples,
-confirm and revise an interpretation, toggle tables, enable comparison on restart,
-and inspect an error outcome. No deployment or MCP work is included here.
+Focused checks in the native browser used real SQLite and a controlled local
+model provider. They passed form submission, both strategy labels, latest-season
+2026 disclosure (Yordan Alvarez, OPS 1.035 and 691 plate appearances), hiding and
+showing both tables with the preference retained across questions, ambiguous
+best-hitter confirmation before results, metric revision, and plain-language
+failure without tables. A 390-pixel viewport showed Luis Vázquez's OPS 0.448
+and 53 plate appearances without page overflow. The screenshot tool failed;
+these checks used browser interaction and DOM inspection. Controlled browser
+results do not establish live OpenAI accuracy. MCP and deployment remain deferred.
 
 Canvas submission, assignment reading, and classmate review remain student tasks.

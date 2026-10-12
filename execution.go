@@ -16,6 +16,9 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		if err := q.validateSeasons(plan.Seasons); err != nil {
 			return q.strategyFailure(input.Strategy, "validate season", err), nil
 		}
+		if input.ResolvedIntent != nil && !sameSeasons(input.ResolvedIntent.Seasons, plan.Seasons) {
+			return q.strategyFailure(input.Strategy, "validate corrected season", errors.New("strategy changed the resolved seasons")), nil
+		}
 		executionCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		result, err := q.DB.Query(executionCtx, plan.SQL)
 		cancel()
