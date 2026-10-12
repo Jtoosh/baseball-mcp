@@ -127,7 +127,12 @@ model provider. They passed form submission, both strategy labels, latest-season
 showing both tables with the preference retained across questions, ambiguous
 best-hitter confirmation before results, metric revision, and plain-language
 failure without tables. A 390-pixel viewport showed Luis Vázquez's OPS 0.448
-and 53 plate appearances without page overflow. The screenshot tool failed;
+and 53 plate appearances without page overflow. Final player-clarification checks
+showed choices and revision controls without tables. Revising to the player age
+23 returned Max Muncy's 2026 OPS 0.683 over 284 plate appearances; a fresh
+clarification revised to Luis Vázquez in 2025 returned OPS 0.448 over 53 plate
+appearances. Both revisions produced answers for both comparison strategies.
+The screenshot tool failed;
 these checks used browser interaction and DOM inspection. Controlled browser
 results do not establish live OpenAI accuracy. MCP and deployment remain deferred.
 
