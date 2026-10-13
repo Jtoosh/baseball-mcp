@@ -43,16 +43,9 @@ func (s *OperationalStore) admit(ctx context.Context, req QuestionRequest) (func
 		if err = json.Unmarshal(payload, &stored); err != nil {
 			return nil, err
 		}
-		if len(stored.Players) > 0 && strings.TrimSpace(req.Revision) == "" {
-			valid := false
-			for _, p := range stored.Players {
-				if p.Description == req.Choice {
-					valid = true
-				}
-			}
-			if !valid {
-				return nil, &publicFailure{"Please choose which player you mean."}
-			}
+		pending := pendingIntent{intent: stored.Intent, players: stored.Players}
+		if _, ok := pending.resolve(req); !ok {
+			return nil, &publicFailure{"Please choose which player you mean."}
 		}
 	} else {
 		if _, err = tx.Exec(ctx, `DELETE FROM baseball_admissions WHERE namespace=$1 AND user_id=$2 AND created<=$3`, s.namespace, identity.User, now.Add(-time.Hour)); err != nil {

@@ -130,7 +130,7 @@ func operationalFixture(t *testing.T) *OperationalStore {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { store.DeleteTestNamespace(context.Background()); store.Close() })
+	t.Cleanup(func() { cleanupOperationalFixture(store); store.Close() })
 	return store
 }
 func TestInvitedUserConfirmsQuestionAcrossInstances(t *testing.T) {
@@ -212,6 +212,10 @@ func TestProductionMonthlyAllowanceKeepsUncertainSpendingUntilUTCReset(t *testin
 	w := hostedPost(app, token, payload)
 	if calls.Load() != 1 || !strings.Contains(w.Body.String(), "2026-11-01") || strings.Contains(w.Body.String(), "table") {
 		t.Fatalf("budget bypass: calls=%d %s", calls.Load(), w.Body.String())
+	}
+	w = hostedPost(app, token, `{"question":"What was Max Muncy's OPS in 2025?"}`)
+	if !strings.Contains(w.Body.String(), "monthly question allowance") || strings.Contains(w.Body.String(), "confirmation") {
+		t.Fatalf("paused allowance still admitted clarification: %s", w.Body.String())
 	}
 	now = now.Add(2 * time.Minute)
 	w = hostedPost(app, token, payload)
@@ -537,5 +541,11 @@ func TestHostedComparisonRetainsCompletedAnswerOnWholeRequestTimeout(t *testing.
 	json.Unmarshal(w.Body.Bytes(), &out)
 	if out.Kind != "answer" || len(out.Strategies) != 2 || out.Strategies[0].Table == nil || out.Strategies[1].Table != nil || !strings.Contains(out.Strategies[1].Message, "took too long") {
 		t.Fatalf("completed comparison lost: %s", w.Body.String())
+	}
+}
+
+func cleanupOperationalFixture(s *OperationalStore) {
+	for _, table := range []string{"baseball_confirmations", "baseball_spending", "baseball_allowances", "baseball_admissions", "baseball_users"} {
+		s.pool.Exec(context.Background(), "DELETE FROM "+table+" WHERE namespace=$1", s.namespace)
 	}
 }

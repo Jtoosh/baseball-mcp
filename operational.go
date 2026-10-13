@@ -78,14 +78,6 @@ func (s *OperationalStore) migrate(ctx context.Context) error {
 	}
 	return tx.Commit(ctx)
 }
-func (s *OperationalStore) DeleteTestNamespace(ctx context.Context) {
-	if len(s.namespace) < 5 || s.namespace[:5] != "test_" {
-		return
-	}
-	for _, table := range []string{"baseball_confirmations", "baseball_spending", "baseball_allowances", "baseball_admissions", "baseball_users"} {
-		s.pool.Exec(ctx, "DELETE FROM "+table+" WHERE namespace=$1", s.namespace)
-	}
-}
 
 type storedIntent struct {
 	Intent  ResolvedIntent
@@ -140,16 +132,9 @@ func (s *OperationalStore) consume(ctx context.Context, req QuestionRequest) (pe
 	if err = json.Unmarshal(payload, &stored); err != nil {
 		return pendingIntent{}, err
 	}
-	if len(stored.Players) > 0 && req.Revision == "" {
-		valid := false
-		for _, p := range stored.Players {
-			if p.Description == req.Choice {
-				valid = true
-			}
-		}
-		if !valid {
-			return pendingIntent{}, errors.New("player choice required")
-		}
+	pending := pendingIntent{question: req.Question, intent: stored.Intent, players: stored.Players, expires: expiry}
+	if _, ok := pending.resolve(req); !ok {
+		return pendingIntent{}, errors.New("player choice required")
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM baseball_confirmations WHERE namespace=$1 AND token=$2`, s.namespace, req.Confirmation); err != nil {
 		return pendingIntent{}, err
@@ -158,5 +143,5 @@ func (s *OperationalStore) consume(ctx context.Context, req QuestionRequest) (pe
 		return pendingIntent{}, err
 	}
 	identity.Admission = admission
-	return pendingIntent{question: req.Question, intent: stored.Intent, players: stored.Players, expires: expiry}, nil
+	return pending, nil
 }

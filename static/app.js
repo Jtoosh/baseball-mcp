@@ -145,8 +145,8 @@ async function ask(request) {
   results.setAttribute('aria-busy', 'true');
   requestError.hidden = true;
   document.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  const generation = accountGeneration;
   try {
-    const generation = accountGeneration;
     const headers = { 'Content-Type': 'application/json' };
     if (authRequired) {
       const token = authReady ? await window.Clerk.session?.getToken() : null;
@@ -168,6 +168,7 @@ async function ask(request) {
       requestError.replaceChildren();
     }
   } catch {
+    if (generation !== accountGeneration) return;
     showFailure({ kind: 'error', message: "I couldn't load the new response. Please try again." }, request.question);
   } finally {
     busy = false;
@@ -204,7 +205,11 @@ async function initializeAccount() {
     await new Promise((resolve, reject) => { script.onload = resolve; script.onerror = reject; document.head.append(script); });
     await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
     authReady = true;
-    const update = ({ user }) => {
+    let activeIdentity;
+    const update = ({ user, session }) => {
+      const identity = user ? user.id + ':' + (session?.id || '') : null;
+      if (identity === activeIdentity) return;
+      activeIdentity = identity;
       accountGeneration++;
       results.replaceChildren();
       requestError.replaceChildren();

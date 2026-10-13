@@ -44,36 +44,34 @@ func (q *QueryService) prepareQuestion(ctx context.Context, req QuestionRequest)
 		return bad("Please confirm the proposed interpretation or revise it using its confirmation.")
 	}
 	if req.Confirmation != "" {
-		q.pending.Lock()
-		p, ok := q.pending.items[req.Confirmation]
+		var p pendingIntent
+		var ok bool
 		if q.State != nil {
 			var err error
 			p, err = q.State.consume(ctx, req)
 			ok = err == nil
-		}
-		if !ok || (q.State == nil && time.Now().After(p.expires)) || p.question != req.Question {
-			q.pending.Unlock()
-			return bad("That confirmation has expired or does not match this question. Please ask the question again.")
-		}
-		if len(p.players) > 0 && req.Revision == "" {
-			for _, player := range p.players {
-				if req.Choice == player.Description {
-					intent = p.intent
-					intent.PlayerID = player.ID
-					intent.Interpretation = player.Description
-					break
+		} else {
+			q.pending.Lock()
+			p, ok = q.pending.items[req.Confirmation]
+			if ok && !time.Now().Before(p.expires) {
+				ok = false
+			}
+			if ok && p.question == req.Question {
+				_, valid := p.resolve(req)
+				if valid {
+					delete(q.pending.items, req.Confirmation)
 				}
 			}
-			if intent.PlayerID == 0 {
-				q.pending.Unlock()
-				return bad("Please choose which player you mean.")
-			}
-		} else {
-			intent = p.intent
+			q.pending.Unlock()
+		}
+		if !ok || p.question != req.Question {
+			return bad("That confirmation has expired or does not match this question. Please ask the question again.")
+		}
+		intent, ok = p.resolve(req)
+		if !ok {
+			return bad("Please choose which player you mean.")
 		}
 		previousPlayers = p.players
-		delete(q.pending.items, req.Confirmation)
-		q.pending.Unlock()
 		if strings.TrimSpace(req.Revision) != "" {
 			// A revision is interpreted anew; it cannot smuggle a generated query or
 			// inherit a previously selected person without that person's distinction.
@@ -130,28 +128,6 @@ func (q *QueryService) remember(ctx context.Context, question string, intent Res
 		return q.failure("create confirmation", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
-	q.pending.Lock()
-	defer q.pending.Unlock()
-	if q.pending.items == nil {
-		q.pending.items = make(map[string]pendingIntent)
-	}
-	now := time.Now()
-	for k, p := range q.pending.items {
-		if now.After(p.expires) {
-			delete(q.pending.items, k)
-		}
-	}
-	if len(q.pending.items) >= 256 {
-		var oldest string
-		var expiry time.Time
-		for k, p := range q.pending.items {
-			if oldest == "" || p.expires.Before(expiry) {
-				oldest = k
-				expiry = p.expires
-			}
-		}
-		delete(q.pending.items, oldest)
-	}
 	if q.State != nil {
 		var err error
 		token, err = q.State.remember(ctx, question, intent, players)
@@ -159,6 +135,28 @@ func (q *QueryService) remember(ctx context.Context, question string, intent Res
 			return q.failure("persist confirmation", err)
 		}
 	} else {
+		q.pending.Lock()
+		defer q.pending.Unlock()
+		if q.pending.items == nil {
+			q.pending.items = make(map[string]pendingIntent)
+		}
+		now := time.Now()
+		for k, p := range q.pending.items {
+			if now.After(p.expires) {
+				delete(q.pending.items, k)
+			}
+		}
+		if len(q.pending.items) >= 256 {
+			var oldest string
+			var expiry time.Time
+			for k, p := range q.pending.items {
+				if oldest == "" || p.expires.Before(expiry) {
+					oldest = k
+					expiry = p.expires
+				}
+			}
+			delete(q.pending.items, oldest)
+		}
 		q.pending.items[token] = pendingIntent{question, intent, players, now.Add(15 * time.Minute)}
 	}
 	out := Outcome{Kind: "clarification", Message: intent.Interpretation, Seasons: intent.Seasons, Confirmation: token}
@@ -169,4 +167,20 @@ func (q *QueryService) remember(ctx context.Context, question string, intent Res
 		}
 	}
 	return out
+}
+
+// resolve applies the same player-choice rule at admission, consumption and use.
+func (p pendingIntent) resolve(req QuestionRequest) (ResolvedIntent, bool) {
+	if len(p.players) > 0 && strings.TrimSpace(req.Revision) == "" {
+		for _, player := range p.players {
+			if player.Description == req.Choice {
+				intent := p.intent
+				intent.PlayerID = player.ID
+				intent.Interpretation = player.Description
+				return intent, true
+			}
+		}
+		return ResolvedIntent{}, false
+	}
+	return p.intent, true
 }

@@ -70,6 +70,10 @@ func hostedConfig(c Config) (Config, error) {
 	if c.Environment == "production" {
 		expected = "sk_live_"
 	}
+	connection, connectionErr := url.Parse(os.Getenv("DATABASE_URL"))
+	if connectionErr != nil || (connection.Scheme != "postgres" && connection.Scheme != "postgresql") || connection.Host == "" || connection.Query().Get("sslmode") != "verify-full" {
+		return c, errors.New("hosted operational connection requires verified TLS")
+	}
 	if !strings.HasPrefix(secret, expected) || os.Getenv("DATABASE_URL") == "" {
 		return c, errors.New("hosted authentication and state credentials required")
 	}

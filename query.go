@@ -103,6 +103,11 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 		if q.State == nil {
 			return q.failure("admit question", errors.New("operational state required"))
 		}
+		if live, ok := q.Model.(*OpenAIModel); ok && live.Budget != nil {
+			if err := live.Budget.available(ctx, live.ModelName); err != nil {
+				return q.failure("check monthly allowance", err)
+			}
+		}
 		release, err := q.State.admit(ctx, req)
 		if err != nil {
 			return q.failure("admit question", err)

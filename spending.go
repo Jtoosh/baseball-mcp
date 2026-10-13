@@ -51,13 +51,13 @@ type spendingReservation struct {
 	Profile   PricingProfile
 }
 
-func (g *SpendingGuard) reserve(ctx context.Context, model string) (spendingReservation, error) {
+func (g *SpendingGuard) validatedProfile(model string) (PricingProfile, error) {
 	if g.State == nil {
-		return spendingReservation{}, errors.New("spending storage required")
+		return PricingProfile{}, errors.New("spending storage required")
 	}
 	minimum, known := validatedPricingProfiles[model]
 	if !known {
-		return spendingReservation{}, errors.New("model pricing profile requires validation")
+		return PricingProfile{}, errors.New("model pricing profile requires validation")
 	}
 	profile := minimum
 	if g.Profile != nil {
@@ -65,14 +65,40 @@ func (g *SpendingGuard) reserve(ctx context.Context, model string) (spendingRese
 	}
 	until, err := time.Parse("2006-01-02", profile.ValidUntil)
 	if err != nil || !g.State.Now().Before(until) || profile.Model != model || profile.ContextTokens < minimum.ContextTokens || profile.ContextTokens > 2_000_000 || profile.InputNanoUSD < minimum.InputNanoUSD || profile.InputNanoUSD > 1_000_000 || profile.OutputNanoUSD < minimum.OutputNanoUSD || profile.OutputNanoUSD > 1_000_000 {
-		return spendingReservation{}, errors.New("model pricing profile requires validation")
+		return PricingProfile{}, errors.New("model pricing profile requires validation")
+	}
+	return profile, nil
+}
+func (g *SpendingGuard) available(ctx context.Context, model string) error {
+	profile, err := g.validatedProfile(model)
+	if err != nil {
+		return err
+	}
+	now := g.State.Now().UTC()
+	var spent int64
+	if err = g.State.pool.QueryRow(ctx, `SELECT COALESCE((SELECT spent FROM baseball_allowances WHERE namespace=$1 AND month=$2),0)`, g.State.namespace, now.Format("2006-01")).Scan(&spent); err != nil {
+		return err
+	}
+	required := profile.ContextTokens*profile.InputNanoUSD + hostedOutputTokens*profile.OutputNanoUSD
+	if spent+required > monthlyAllowance {
+		return allowancePaused(now)
+	}
+	return nil
+}
+func allowancePaused(now time.Time) error {
+	next := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	return &publicFailure{fmt.Sprintf("The monthly question allowance is paused. Questions resume at %s UTC.", next.Format("2006-01-02 15:04"))}
+}
+func (g *SpendingGuard) reserve(ctx context.Context, model string) (spendingReservation, error) {
+	profile, err := g.validatedProfile(model)
+	if err != nil {
+		return spendingReservation{}, err
 	}
 	// Reserve the entire model context, including provider framing and schemas;
 	// no heuristic text estimate or potentially billed counting call is needed.
 	amount := profile.ContextTokens*profile.InputNanoUSD + hostedOutputTokens*profile.OutputNanoUSD
 	now := g.State.Now().UTC()
 	month := now.Format("2006-01")
-	next := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
 	tx, err := g.State.pool.Begin(ctx)
 	if err != nil {
 		return spendingReservation{}, err
@@ -86,7 +112,7 @@ func (g *SpendingGuard) reserve(ctx context.Context, model string) (spendingRese
 		return spendingReservation{}, err
 	}
 	if tag.RowsAffected() != 1 {
-		return spendingReservation{}, &publicFailure{fmt.Sprintf("The monthly question allowance is paused. Questions resume at %s UTC.", next.Format("2006-01-02 15:04"))}
+		return spendingReservation{}, allowancePaused(now)
 	}
 	id := randomToken()
 	if _, err = tx.Exec(ctx, `INSERT INTO baseball_spending(namespace,id,month,amount,settled,created) VALUES($1,$2,$3,$4,false,$5)`, g.State.namespace, id, month, amount, now); err != nil {
