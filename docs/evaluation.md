@@ -137,3 +137,20 @@ these checks used browser interaction and DOM inspection. Controlled browser
 results do not establish live OpenAI accuracy. MCP and deployment remain deferred.
 
 Canvas submission, assignment reading, and classmate review remain student tasks.
+
+## Markdown and loading UI verification
+
+Native browser checks with controlled HTTP responses verified headings, bold,
+italics, lists, Markdown tables, clarification Markdown, and safe links opening
+in a new tab. Raw HTML, scripts, images, and unsafe link schemes did not enter
+the rendered answer or execute. The table switch hid only database tables.
+
+Delayed requests verified actual spinning baseball animation, retaining prior
+results, stopping the animation on completion, and rejecting duplicate requests.
+Activating the stylesheet's reduced-motion rule disabled rotation while keeping
+the baseball visible. Error and rejected-network responses retained and labelled
+the prior answer; malformed responses did the same. Comparison retained a
+successful answer beside a failed strategy. A 390-pixel viewport had no page
+horizontal overflow. These UI checks used controlled responses, not live model
+accuracy evaluation. Public HTTP tests verify the local browser assets, content
+types, CSP, and rejection of private asset paths.

@@ -28,6 +28,17 @@ Open <http://127.0.0.1:8080> and ask, for example, “What was Luis Vázquez's O
 2025?” The supplied snapshot records OPS 0.448 over 53 plate appearances. The
 “Show supporting results” switch hides or reveals the friendly result table.
 
+Answers, clarification questions, and scope explanations render Markdown,
+including headings, emphasis, lists, and tables. Links open in a new tab;
+embedded HTML and images are excluded. The switch controls only database
+result tables, so Markdown tables in the answer remain visible.
+
+A small baseball spins during every request, including confirmation and revision.
+It stays stationary when the browser requests reduced motion. Previous results
+remain visible while loading. If the new request fails, the application labels
+the previous answer and shows the new error separately. A successful comparison
+strategy remains visible alongside a failed strategy.
+
 Try the browser's example questions for MLB-wide leaders, dense-rank ties,
 three-way top-ten overlap, and advanced metrics:
 
