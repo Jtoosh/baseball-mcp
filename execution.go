@@ -36,7 +36,7 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		if err != nil {
 			q.logFailure(stage+" ("+input.Strategy+")", err)
 			if attempt == 1 {
-				return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: questionFailureMessage}, plan.Seasons
+				return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: friendlyFailure(err)}, plan.Seasons
 			}
 			input.PreviousSQL, input.DatabaseError = plan.SQL, stage+": "+err.Error()
 			plan, err = q.plan(ctx, input)
@@ -82,11 +82,23 @@ const questionFailureMessage = "I couldn't answer that question. Please try agai
 
 func (q *QueryService) logFailure(stage string, err error) {
 	if q.Logger != nil {
-		q.Logger.Printf("%s: %v", stage, err)
+		if q.Config.Environment == "production" || q.Config.Environment == "preview" {
+			classification := "dependency_or_validation_failure"
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				classification = "deadline_or_cancellation"
+			}
+			var denied *publicFailure
+			if errors.As(err, &denied) {
+				classification = "admission_denied"
+			}
+			q.Logger.Printf("stage=%q class=%s", stage, classification)
+		} else {
+			q.Logger.Printf("%s: %v", stage, err)
+		}
 	}
 }
 
 func (q *QueryService) strategyFailure(strategy, stage string, err error) StrategyOutcome {
 	q.logFailure(stage+" ("+strategy+")", err)
-	return StrategyOutcome{Strategy: strategy, Kind: "error", Message: questionFailureMessage}
+	return StrategyOutcome{Strategy: strategy, Kind: "error", Message: friendlyFailure(err)}
 }

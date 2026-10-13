@@ -1,0 +1,66 @@
+{
+  "spec": 9,
+  "tickets": [
+    {
+      "position": 1,
+      "number": 10,
+      "id": 5824617048,
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/10",
+      "title": "Serve hosted questions behind invited email sign-in",
+      "blocked_by": []
+    },
+    {
+      "position": 2,
+      "number": 11,
+      "id": 5824617353,
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/11",
+      "title": "Resume confirmed questions safely across hosted instances",
+      "blocked_by": [
+        10
+      ]
+    },
+    {
+      "position": 3,
+      "number": 12,
+      "id": 5824617811,
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/12",
+      "title": "Enforce the monthly allowance before every model call",
+      "blocked_by": [
+        11
+      ]
+    },
+    {
+      "position": 4,
+      "number": 13,
+      "id": 5824618205,
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/13",
+      "title": "Enforce fair admission and the whole-request deadline",
+      "blocked_by": [
+        11,
+        12
+      ]
+    },
+    {
+      "position": 5,
+      "number": 14,
+      "id": 5824618804,
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/14",
+      "title": "Provide controlled previews and private hosted diagnostics",
+      "blocked_by": [
+        10,
+        11
+      ]
+    },
+    {
+      "position": 6,
+      "number": 15,
+      "id": 5824619335,
+      "url": "https://github.com/Jtoosh/baseball-mcp/issues/15",
+      "title": "Publish test-gated deployments on the custom subdomain",
+      "blocked_by": [
+        13,
+        14
+      ]
+    }
+  ]
+}

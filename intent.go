@@ -46,7 +46,12 @@ func (q *QueryService) prepareQuestion(ctx context.Context, req QuestionRequest)
 	if req.Confirmation != "" {
 		q.pending.Lock()
 		p, ok := q.pending.items[req.Confirmation]
-		if !ok || time.Now().After(p.expires) || p.question != req.Question {
+		if q.State != nil {
+			var err error
+			p, err = q.State.consume(ctx, req)
+			ok = err == nil
+		}
+		if !ok || (q.State == nil && time.Now().After(p.expires)) || p.question != req.Question {
 			q.pending.Unlock()
 			return bad("That confirmation has expired or does not match this question. Please ask the question again.")
 		}
@@ -114,12 +119,12 @@ func (q *QueryService) prepareQuestion(ctx context.Context, req QuestionRequest)
 			return req, intent, nil
 		}
 
-		o := q.remember(req.Question, intent, candidates)
+		o := q.remember(ctx, req.Question, intent, candidates)
 		return req, intent, &o
 	}
 	return req, intent, nil
 }
-func (q *QueryService) remember(question string, intent ResolvedIntent, players []data.PlayerCandidate) Outcome {
+func (q *QueryService) remember(ctx context.Context, question string, intent ResolvedIntent, players []data.PlayerCandidate) Outcome {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return q.failure("create confirmation", err)
@@ -147,7 +152,15 @@ func (q *QueryService) remember(question string, intent ResolvedIntent, players 
 		}
 		delete(q.pending.items, oldest)
 	}
-	q.pending.items[token] = pendingIntent{question, intent, players, now.Add(15 * time.Minute)}
+	if q.State != nil {
+		var err error
+		token, err = q.State.remember(ctx, question, intent, players)
+		if err != nil {
+			return q.failure("persist confirmation", err)
+		}
+	} else {
+		q.pending.items[token] = pendingIntent{question, intent, players, now.Add(15 * time.Minute)}
+	}
 	out := Outcome{Kind: "clarification", Message: intent.Interpretation, Seasons: intent.Seasons, Confirmation: token}
 	if len(players) > 0 {
 		out.Message = "There is more than one player named " + players[0].Name + ". Which one do you mean?"

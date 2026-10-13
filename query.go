@@ -76,6 +76,7 @@ type QueryService struct {
 	Logger   *log.Logger
 	Recorder *EvaluationRecorder
 	pending  pendingClarifications
+	State    *OperationalStore
 }
 
 func NewQueryService(db *Database, model Model, config Config, logger *log.Logger) *QueryService {
@@ -94,6 +95,19 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 	}
 	if strings.TrimSpace(req.Question) == "" || len(req.Question) > 4000 {
 		return Outcome{Kind: "error", Message: "Please enter a baseball statistics question of at most 4,000 characters."}
+	}
+	if _, hosted := ctx.Value(hostedContextKey{}).(*hostedIdentity); hosted {
+		if req.Interpretation != "" || len(req.Revision) > 4000 || (req.Confirmation == "" && (req.Revision != "" || req.Choice != "")) {
+			return Outcome{Kind: "error", Message: "Please confirm the proposed interpretation or revise it using its confirmation."}
+		}
+		if q.State == nil {
+			return q.failure("admit question", errors.New("operational state required"))
+		}
+		release, err := q.State.admit(ctx, req)
+		if err != nil {
+			return q.failure("admit question", err)
+		}
+		defer release()
 	}
 	req, intent, pending := q.prepareQuestion(ctx, req)
 	if pending != nil {
@@ -134,7 +148,7 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 			}
 			intent.Interpretation = plan.Message
 			intent.Seasons = plan.Seasons
-			return q.remember(req.Question, intent, nil)
+			return q.remember(ctx, req.Question, intent, nil)
 		case "unsupported":
 			if !q.safePublicText(plan.Message) {
 				return q.failure("validate unsupported explanation", errors.New("private explanation"))
@@ -207,7 +221,7 @@ func sameSeasons(a, b []int) bool {
 }
 func (q *QueryService) failure(stage string, err error) Outcome {
 	q.logFailure(stage, err)
-	return Outcome{Kind: "error", Message: questionFailureMessage}
+	return Outcome{Kind: "error", Message: friendlyFailure(err)}
 }
 
 func (q *QueryService) safePublicText(text string) bool {

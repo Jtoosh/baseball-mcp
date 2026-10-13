@@ -116,3 +116,9 @@ are documented in [evaluation and assignment evidence](docs/evaluation.md), with
 schema diagram, twelve-case reference harness, six additional demo examples, and
 an accurate record of browser-verification limitations. Set `evaluation_file` to a
 private path to enable recording; leave it absent to keep recording disabled.
+
+## Invited hosted version
+
+The approved hosting extension targets `baseball.jamesteuscher.click` on Vercel Hobby. Start with [hosted setup and operation](docs/hosting/setup.md); the owner-only credential wizard is `bash scripts/setup-hosting.sh`. Keep secrets out of chat and source control. Automatic deployments remain disabled until owner setup and smoke checks are complete.
+
+Hosted integration tests use real PostgreSQL in addition to SQLite. Set `TEST_DATABASE_URL` to a disposable local PostgreSQL database and `REQUIRE_HOSTED_TESTS=1` to require these tests rather than skip them. CI supplies this fixture without production credentials or paid model calls.

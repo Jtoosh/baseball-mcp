@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "go",
+  "buildCommand": "bash scripts/build-hosted.sh",
+  "git": { "deploymentEnabled": false }
+}

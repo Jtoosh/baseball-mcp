@@ -1,0 +1,72 @@
+name: Verify and deploy hosted app
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment for manual smoke checks
+        type: choice
+        options: [preview, production]
+        default: preview
+permissions:
+  contents: read
+concurrency:
+  group: hosting-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  hosted:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: baseball_test
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: baseball_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://baseball_test:test-only@localhost:5432/baseball_test?sslmode=disable
+      REQUIRE_HOSTED_TESTS: '1'
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify changes without deployment credentials
+        if: github.event_name == 'pull_request' || (github.event_name != 'workflow_dispatch' && vars.HOSTING_DEPLOY_ENABLED != 'true')
+        run: bash scripts/build-hosted.sh
+      - name: Build and publish after tests pass
+        if: github.event_name != 'pull_request' && (github.event_name == 'workflow_dispatch' || vars.HOSTING_DEPLOY_ENABLED == 'true')
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          MANUAL_TARGET: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          : "${VERCEL_TOKEN:?Configure the private Vercel deployment token}"
+          : "${VERCEL_ORG_ID:?Configure the Vercel organization ID}"
+          : "${VERCEL_PROJECT_ID:?Configure the Vercel project ID}"
+          target=preview
+          flags=()
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            target="$MANUAL_TARGET"
+          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            target=production
+          fi
+          if [[ "$target" == production ]]; then flags=(--prod); fi
+          npx --yes vercel@63.1.2 pull --yes --environment="$target" --token="$VERCEL_TOKEN"
+          # build-hosted.sh runs real PostgreSQL tests before producing the binary.
+          npx --yes vercel@63.1.2 build "${flags[@]}" --token="$VERCEL_TOKEN"
+          # Vercel Git deployments are disabled: only a successful build reaches here.
+          npx --yes vercel@63.1.2 deploy --prebuilt "${flags[@]}" --token="$VERCEL_TOKEN"

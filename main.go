@@ -12,9 +12,27 @@ import (
 func main() {
 	path := flag.String("config", "config.json", "administrator JSON configuration")
 	flag.Parse()
+	if os.Getenv("VERCEL_ENV") != "" && *path == "config.json" {
+		*path = "config.hosted.json"
+	}
 	config, err := LoadConfig(*path)
 	if err != nil {
 		log.Fatal(err)
+	}
+	config, err = hostedConfig(config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if config.Environment != "local" {
+		handler, cleanup, err := startHosted(config)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer cleanup()
+		server := http.Server{Addr: config.Listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 125 * time.Second}
+		log.Printf("Hosted server listening")
+		log.Fatal(server.ListenAndServe())
+		return
 	}
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		log.Fatal("Set OPENAI_API_KEY on the server")

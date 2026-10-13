@@ -2,7 +2,7 @@
 
 Parent specification: https://github.com/Jtoosh/baseball-mcp/issues/9
 
-Status: draft awaiting breakdown approval; no implementation tickets published yet. Numbers below are plan positions, not GitHub issue numbers.
+Status: approved and published. Plan positions map to GitHub issues in hosting-publication.json; dependencies are native GitHub blocking relationships.
 
 ## 1. Serve hosted questions behind invited email sign-in
 

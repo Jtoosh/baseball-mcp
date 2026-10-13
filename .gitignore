@@ -39,3 +39,8 @@ config.json
 .private/
 .env.*
 baseball-mcp
+.vercel
+.env*
+
+# Hosted build output
+server

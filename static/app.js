@@ -8,6 +8,9 @@ const requestError = document.querySelector('#request-error');
 const previousLabel = document.querySelector('#previous-label');
 let busy = false;
 let displayedKind = '';
+let authRequired = false;
+let authReady = false;
+let accountGeneration = 0;
 
 const markdown = new marked.Marked({
   gfm: true,
@@ -143,8 +146,16 @@ async function ask(request) {
   requestError.hidden = true;
   document.querySelectorAll('button').forEach(button => { button.disabled = true; });
   try {
-    const response = await fetch('/api/questions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    const generation = accountGeneration;
+    const headers = { 'Content-Type': 'application/json' };
+    if (authRequired) {
+      const token = authReady ? await window.Clerk.session?.getToken() : null;
+      if (!token) throw new Error('Sign-in required');
+      headers.Authorization = 'Bearer ' + token;
+    }
+    const response = await fetch('/api/questions', { method: 'POST', headers, body: JSON.stringify(request) });
     const data = await response.json();
+    if (generation !== accountGeneration) return;
     if (!data || !['answer', 'clarification', 'unsupported', 'error'].includes(data.kind)) throw new Error('Invalid response');
     if (!response.ok && data.kind !== 'error') throw new Error('Request failed');
     if (data.kind === 'error') {
@@ -170,3 +181,49 @@ form.addEventListener('submit', event => {
   event.preventDefault();
   ask({ question: document.querySelector('#question').value.trim() });
 });
+
+async function initializeAccount() {
+  try {
+    const response = await fetch('/api/client-config');
+    if (!response.ok) throw new Error('Configuration unavailable');
+    const config = await response.json();
+    if (config.mode === 'local') return;
+    authRequired = true;
+    document.querySelector('#account').hidden = false;
+    form.hidden = true;
+    document.querySelector('#preview-notice').hidden = config.mode !== 'preview';
+    const issuer = new URL(config.issuer);
+    if (issuer.protocol !== 'https:' || !config.publishable_key?.startsWith('pk_')) throw new Error('Invalid sign-in configuration');
+    const ui = document.createElement('script');
+    ui.src = issuer.origin + '/npm/@clerk/ui@1/dist/ui.browser.js';
+    ui.crossOrigin = 'anonymous';
+    await new Promise((resolve, reject) => { ui.onload = resolve; ui.onerror = reject; document.head.append(ui); });
+    const script = document.createElement('script');
+    script.src = issuer.origin + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
+    script.dataset.clerkPublishableKey = config.publishable_key;
+    await new Promise((resolve, reject) => { script.onload = resolve; script.onerror = reject; document.head.append(script); });
+    await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
+    authReady = true;
+    const update = ({ user }) => {
+      accountGeneration++;
+      results.replaceChildren();
+      requestError.replaceChildren();
+      requestError.hidden = true;
+      previousLabel.hidden = true;
+      displayedKind = '';
+      form.hidden = !user;
+      document.querySelector('#sign-out').hidden = !user;
+      document.querySelector('#sign-in').hidden = !!user;
+      document.querySelector('#account-status').textContent = user ? 'Signed in' : 'Sign in with an invited email address.';
+      if (!user) window.Clerk.mountSignIn(document.querySelector('#sign-in'), { routing: 'hash', signInForceRedirectUrl: location.origin + '/' });
+    };
+    window.Clerk.addListener(update);
+    document.querySelector('#sign-out').addEventListener('click', () => window.Clerk.signOut());
+  } catch {
+    authRequired = true;
+    form.hidden = true;
+    document.querySelector('#account').hidden = false;
+    document.querySelector('#account-status').textContent = 'Sign-in is temporarily unavailable. Please reload later.';
+  }
+}
+initializeAccount();

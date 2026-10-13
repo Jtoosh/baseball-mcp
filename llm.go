@@ -17,17 +17,34 @@ import (
 type OpenAIModel struct {
 	Client    openai.Client
 	ModelName string
+	Budget    *SpendingGuard
 }
 
 func NewOpenAIModel(model string) *OpenAIModel {
-	return &OpenAIModel{openai.NewClient(option.WithMaxRetries(0)), model}
+	return &OpenAIModel{Client: openai.NewClient(option.WithMaxRetries(0)), ModelName: model}
 }
 func (m *OpenAIModel) structured(ctx context.Context, name, instructions, input string, schema map[string]any, target any) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	response, err := m.Client.Responses.New(ctx, responses.ResponseNewParams{Model: m.ModelName, Input: responses.ResponseNewParamsInputUnion{OfString: openai.String(input)}, Instructions: openai.String(instructions), Store: openai.Bool(false), Text: responses.ResponseTextConfigParam{Format: responses.ResponseFormatTextConfigUnionParam{OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{Name: name, Schema: schema, Strict: openai.Bool(true)}}}})
+	params := responses.ResponseNewParams{Model: m.ModelName, Input: responses.ResponseNewParamsInputUnion{OfString: openai.String(input)}, Instructions: openai.String(instructions), Store: openai.Bool(false), Text: responses.ResponseTextConfigParam{Format: responses.ResponseFormatTextConfigUnionParam{OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{Name: name, Schema: schema, Strict: openai.Bool(true)}}}}
+	var reservation spendingReservation
+	if m.Budget != nil {
+		params.MaxOutputTokens = openai.Int(hostedOutputTokens)
+		params.ServiceTier = responses.ResponseNewParamsServiceTierDefault
+		var err error
+		reservation, err = m.Budget.reserve(ctx, m.ModelName)
+		if err != nil {
+			return err
+		}
+	}
+	response, err := m.Client.Responses.New(ctx, params)
 	if err != nil {
 		return err
+	}
+	if m.Budget != nil {
+		if err = m.Budget.settle(ctx, reservation, response); err != nil {
+			return err
+		}
 	}
 	if response.Status != "completed" {
 		return errors.New("model response was incomplete")

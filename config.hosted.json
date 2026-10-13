@@ -1,0 +1,5 @@
+{
+  "model": "gpt-6.1-sol",
+  "default_strategy": "schema",
+  "comparison_mode": false
+}

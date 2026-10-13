@@ -32,6 +32,10 @@ func NewHandler(service *QueryService) http.Handler {
 		body, _ := browserFiles.ReadFile("static/index.html")
 		w.Write(body)
 	})
+	mux.HandleFunc("GET /api/client-config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"mode": "local"})
+	})
 	mux.HandleFunc("POST /api/questions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		r.Body = http.MaxBytesReader(w, r.Body, 16384)
@@ -54,7 +58,12 @@ func NewHandler(service *QueryService) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+		policy := "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+		if service.Config.Environment == "production" || service.Config.Environment == "preview" {
+			issuer := service.Config.ClerkIssuer
+			policy = "default-src 'self'; script-src 'self' " + issuer + " https://challenges.cloudflare.com https://*.protect.clerk.com; style-src 'self' 'unsafe-inline'; connect-src 'self' " + issuer + " https://*.protect.clerk.com:*; img-src 'self' https://img.clerk.com data:; worker-src 'self' blob:; frame-src " + issuer + " https://challenges.cloudflare.com https://*.protect.clerk.com; form-action 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+		}
+		w.Header().Set("Content-Security-Policy", policy)
 		mux.ServeHTTP(w, r)
 	})
 }
