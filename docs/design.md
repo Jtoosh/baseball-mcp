@@ -1,6 +1,6 @@
 # Baseball question application
 
-Working design decisions from the project interview. Implementation has not started.
+Working design decisions from the project interview. The browser-first application is implemented; the approved hosting extension is specified below.
 
 ## Scope and data
 
@@ -49,7 +49,7 @@ Working design decisions from the project interview. Implementation has not star
 - `database.go`: database access.
 - `static/index.html`: browser interface.
 - Defer `mcp.go`; a later MCP adapter can call the same question workflow.
-- Run locally first, with Vercel deployment planned later.
+- Preserve local development and add hosted deployment under the approved [hosting specification](hosting-spec.md).
 
 ## Evaluation
 
@@ -64,3 +64,12 @@ The corrected export, `advanced-mlb-24-26.csv`, has unique player-season keys an
 The corrected CSV includes the traditional batting statistics needed for all initial examples, including singles and exported OPS. Import all available metrics, preserving their exported values. Source filter settings and retrieval dates should be recorded when available; the CSV itself does not contain them.
 
 MCP protocol details and hosted deployment operations are deferred to their later extensions.
+
+## Hosted extension
+
+- Serve baseball.jamesteuscher.click on Vercel Hobby, with dashboard-managed Clerk invitations and email OTP. Validate access on the server for each question.
+- Keep the immutable read-only SQLite batting snapshot; use free Neon PostgreSQL for shared confirmations, question admissions, leases and spending reservations.
+- Allow twenty questions per user per rolling hour and one active question per user. Bound each hosted request to two minutes, retaining the existing ten-second SQL ceiling.
+- Reserve every production model call against a $10 UTC-calendar-month allowance before contacting the provider. Unknown pricing or uncertain accounting fails closed; there is no budget override.
+- Use protected, visibly labelled controlled previews with isolated state and no production model credentials. Successful main builds deploy automatically only after tests pass.
+- Retain safe private error diagnostics and necessary operational state; disable hosted evaluation histories. Owner account provisioning and secret entry use secure mechanisms outside chat.

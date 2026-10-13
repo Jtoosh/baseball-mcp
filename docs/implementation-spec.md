@@ -98,12 +98,12 @@ Present the answer alongside an optional, clearly labelled result table. Ask for
 - **Privacy:** Inspect actual HTTP responses, including clarification, out-of-scope, partial, and error responses, for SQL and schema leakage. Verify logs, evaluation artifacts, secrets, and raw database files are unavailable through public routes. Confirm tables expose presentation labels rather than schema identifiers.
 - **Browser verification:** Perform a focused browser check for question submission, clarification confirmation/revision, labelled comparison output, readable statistics, and the table visibility switch. This checks UI behavior alongside the primary HTTP suite rather than duplicating every workflow case in browser automation.
 - **Live evaluation:** Run an explicit, optional evaluation against the configured OpenAI model with both strategies and a fixed dataset. Compare retrieved data and final wording separately against the reference answers, inspect private evaluation records, and report discrepancies. Passing deterministic tests alone is not proof of live model accuracy.
-- **Prior art:** The repository currently contains design documentation, a verified CSV, and reference-answer artifacts, but no Go implementation or existing application tests. The reference answers and independent data checks are the current testing prior art.
+- **Prior art:** At initial specification, design documentation, the verified CSV and independently checked reference answers provided the testing foundation. The completed browser implementation now adds public HTTP tests, controlled model transports, real SQLite fixtures and browser asset checks; the hosting extension builds on these.
 
 ## Out of Scope
 
 - Real MCP protocol compatibility, transport selection, and MCP SDK or manual protocol implementation.
-- Vercel deployment, hosted persistence for logs and evaluation records, and hosted access-control or billing design.
+- Hosting was deferred from this browser-first phase; the approved hosting extension now defines Vercel deployment, invited access, shared operational state and spending controls. Hosted evaluation histories remain excluded.
 - Live MLB fetching, automatic refreshes, in-browser uploads, and data mutation through natural-language requests.
 - Team-specific or AL/NL analysis not represented by the supplied export.
 - Pitching, postseason statistics, or unsupported seasons and metrics; explain these requests instead of fabricating data.
@@ -112,6 +112,8 @@ Present the answer alongside an optional, clearly labelled result table. Ask for
 - Comparing different models or datasets as part of the initial prompting-strategy comparison.
 
 ## Further Notes
+
+- The browser-first phase is implemented. See the approved [hosting extension](hosting-spec.md) for deployment, access, operational state and budget decisions.
 
 - This spec implements the agreed browser-first version even though the repository name refers to MCP. A later MCP adapter should reuse the question workflow.
 - The corrected CSV's SHA-256 is `60de4620c5e90e112a1c1142cd1504af42e46ece8ba816a1d21ea530a6b318ca`. Reference values are authoritative for that supplied snapshot, not a claim about a live MLB feed.

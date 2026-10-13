@@ -42,3 +42,18 @@ A fixed collection of batting statistics for a past regular season, rather than 
 
 **Latest available season**:
 The most recent season represented in the dataset. A question that omits a season defaults to this season, which is disclosed in the answer.
+
+**Invited user**:
+A person granted access by the site owner through an email invitation. An invitation does not grant access after the owner removes the user.
+
+**Question admission**:
+Acceptance of one independent question for processing. Clarifying or revising its pending interpretation remains part of that question.
+
+**Monthly allowance**:
+The $10 USD limit for this application's production model calls in a UTC calendar month, renewing at midnight UTC on the first day of the next month.
+
+**Spending reservation**:
+Funds held from the monthly allowance before a model call to cover its maximum validated cost. Uncertain billed work keeps its reservation.
+
+**Controlled preview**:
+A protected non-production version that uses predetermined test responses and isolated operational state rather than paid production model calls.
