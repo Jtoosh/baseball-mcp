@@ -1,0 +1,196 @@
+{
+  "description": "Reference cases for the supplied CSV only. Expected data is exact; answer wording may vary. Source fields and player IDs are private developer evaluation metadata, not a browser response format.",
+  "source": {
+    "path": "advanced-mlb-24-26.csv",
+    "sha256": "60de4620c5e90e112a1c1142cd1504af42e46ece8ba816a1d21ea530a6b318ca",
+    "rows": 1879
+  },
+  "verification": "HR leaders, 2026 OPS leader, all three top-ten intersections, tied tenth-place HR values, qualification counts, and identity quality were independently checked with a Python Decimal scan and in-memory SQLite calculations. Luis Vazquez OPS is read directly from his unique source row. Workflow expectations reflect the agreed design.",
+  "cases": [
+    {
+      "id": "hr-leaders-all-seasons",
+      "question": "Who led MLB in home runs in 2024, 2025, and 2026?",
+      "expected": {
+        "qualification_min_pa": 502,
+        "leaders": [
+          {
+            "player_id": 592450,
+            "source_name": "Judge, Aaron",
+            "season": 2024,
+            "home_run": 58,
+            "plate_appearances": 704
+          },
+          {
+            "player_id": 663728,
+            "source_name": "Raleigh, Cal",
+            "season": 2025,
+            "home_run": 60,
+            "plate_appearances": 705
+          },
+          {
+            "player_id": 656941,
+            "source_name": "Schwarber, Kyle",
+            "season": 2026,
+            "home_run": 45,
+            "plate_appearances": 701
+          },
+          {
+            "player_id": 691718,
+            "source_name": "Crow-Armstrong, Pete",
+            "season": 2026,
+            "home_run": 45,
+            "plate_appearances": 726
+          }
+        ]
+      }
+    },
+    {
+      "id": "ops-leader-2026",
+      "question": "Who led MLB in OPS in 2026?",
+      "expected": {
+        "qualification_min_pa": 502,
+        "leaders": [
+          {
+            "player_id": 670541,
+            "source_name": "Alvarez, Yordan",
+            "season": 2026,
+            "on_base_plus_slg": "1.035",
+            "plate_appearances": 691
+          }
+        ]
+      }
+    },
+    {
+      "id": "top-ten-overlap-2024",
+      "question": "Is any qualifying player in the top ten for home runs, singles, and doubles in 2024?",
+      "expected": {
+        "ranking": "dense",
+        "qualification_min_pa": 502,
+        "matching_players": [],
+        "outcome": "normal_empty_result"
+      }
+    },
+    {
+      "id": "top-ten-overlap-2025",
+      "question": "Is any qualifying player in the top ten for home runs, singles, and doubles in 2025?",
+      "expected": {
+        "ranking": "dense",
+        "qualification_min_pa": 502,
+        "matching_players": [],
+        "outcome": "normal_empty_result"
+      }
+    },
+    {
+      "id": "top-ten-overlap-2026",
+      "question": "Is any qualifying player in the top ten for home runs, singles, and doubles in 2026?",
+      "expected": {
+        "ranking": "dense",
+        "qualification_min_pa": 502,
+        "matching_players": [],
+        "outcome": "normal_empty_result"
+      }
+    },
+    {
+      "id": "ties-at-dense-rank-ten",
+      "question": "Which qualifying players share tenth place by dense rank for home runs in 2024?",
+      "expected": {
+        "rank": 10,
+        "leaders": [
+          {
+            "player_id": 624413,
+            "source_name": "Alonso, Pete",
+            "season": 2024,
+            "home_run": 34,
+            "plate_appearances": 695
+          },
+          {
+            "player_id": 663728,
+            "source_name": "Raleigh, Cal",
+            "season": 2024,
+            "home_run": 34,
+            "plate_appearances": 628
+          }
+        ]
+      }
+    },
+    {
+      "id": "nonqualifying-player-lookup",
+      "question": "What was Luis Vázquez’s OPS in 2025?",
+      "expected": {
+        "player_id": 676679,
+        "source_name": "Vázquez, Luis",
+        "season": 2025,
+        "on_base_plus_slg": "0.448",
+        "plate_appearances": 53
+      }
+    },
+    {
+      "id": "latest-season-default",
+      "question": "Who led MLB in OPS?",
+      "expected": {
+        "selected_season": 2026,
+        "must_disclose_season": true,
+        "requires_season_confirmation": false,
+        "leaders": [
+          {
+            "player_id": 670541,
+            "source_name": "Alvarez, Yordan",
+            "season": 2026,
+            "on_base_plus_slg": "1.035",
+            "plate_appearances": 691
+          }
+        ]
+      }
+    },
+    {
+      "id": "ambiguous-player-name",
+      "question": "What was Max Muncy’s OPS in 2026?",
+      "expected": {
+        "outcome": "clarification",
+        "candidate_player_ids": [
+          571970,
+          691777
+        ],
+        "sql_execution_before_confirmation": false
+      }
+    },
+    {
+      "id": "qualifying-counts",
+      "question": "How many players had at least 502 plate appearances in each available season?",
+      "expected": {
+        "counts": [
+          {
+            "season": 2024,
+            "players": 129
+          },
+          {
+            "season": 2025,
+            "players": 145
+          },
+          {
+            "season": 2026,
+            "players": 135
+          }
+        ]
+      }
+    },
+    {
+      "id": "empty-result",
+      "question": "Which qualifying players hit more than 100 home runs in 2026?",
+      "expected": {
+        "matching_players": [],
+        "outcome": "normal_empty_result"
+      }
+    },
+    {
+      "id": "ambiguous-metric",
+      "question": "Who was the best hitter in 2026?",
+      "expected": {
+        "outcome": "clarification",
+        "must_propose_metric": true,
+        "sql_execution_before_confirmation": false
+      }
+    }
+  ],
+  "pending_reference_cases": []
+}
