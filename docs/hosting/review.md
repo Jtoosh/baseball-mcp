@@ -13,7 +13,7 @@ Initial review found the same Clerk notification regression against the requirem
 ## Checks performed
 
 - The complete deployment gate passed: JavaScript syntax, Go vet, full `go test -race ./...` with required real PostgreSQL hosted tests, and the server build. All packages passed; no live model calls were made.
-- GitHub Actions workflow passed actionlint; both shell scripts passed syntax checks; the diff passed whitespace checks.
+- GitHub Actions workflow passed actionlint; both shell scripts passed syntax and ShellCheck checks; the diff passed whitespace checks.
 - Targeted race-enabled tests after review fixes covered clarification, revision, cross-instance confirmation, private approval, stale lease release, shared budget concurrency, trustworthy usage settlement and UTC reset. A red/green regression additionally ensures a paused allowance denies clarification before creating pending state.
 - Native T3 browser checks used the actual local HTTP application and a controlled local SDK provider for the reference OPS answer, Markdown and spinner behavior. Controlled browser denials verified previous-answer retention. Controlled external Clerk notifications reproduced the clearing bug before the fix, then verified same-identity retention, in-flight delivery and sign-out during a late network failure after the fix. A controlled hosted configuration failure hid the question form and displayed the preview notice. These checks do not establish live Clerk email delivery.
 - A Linux/amd64 cross-build passed, and a startup artifact check rejected a non-verified PostgreSQL connection before serving requests.

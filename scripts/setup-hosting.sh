@@ -197,7 +197,7 @@ put_vercel() {
   [[ -n "$value" ]] || { warn "$name must not be empty"; exit 1; }
   if ! printf '%s' "$value" | npx --yes vercel@63.1.2 env add "$name" "$target" --type "$kind" --project baseball-mcp >/dev/null 2>&1; then
     if ! printf '%s' "$value" | npx --yes vercel@63.1.2 env update "$name" "$target" --type "$kind" --project baseball-mcp --yes >/dev/null 2>&1; then
-      warn "Could not configure $name for $target. Check the linked project and account permissions privately."
+      printf '  %sCould not configure %s for %s. Check project/account permissions privately.%s\n' "$RED" "$name" "$target" "$RESET"
       exit 1
     fi
   fi
