@@ -33,7 +33,6 @@ Working design decisions from the project interview. The browser-first applicati
 - Present a natural-language answer and a table formatted for a general audience, with a switch to hide the table.
 - Never expose generated SQL or database schema details in browser output, including errors and comparison results.
 - Save error messages in a developer log unavailable to end users.
-- Permit an optional developer-only evaluation record containing the question, strategy, generated SQL, results, and final answer. Neither evaluation records nor developer logs are served to the browser.
 - Comparison mode runs both prompting strategies automatically and presents separately labelled answers and optional tables.
 - If one strategy fails, retain the other strategy's successful answer and optional table. The failed strategy presents only a natural-language error.
 
@@ -53,9 +52,9 @@ Working design decisions from the project interview. The browser-first applicati
 
 ## Evaluation
 
-Create independently checked reference answers using the imported snapshots. Cover the initial questions, ties, qualification rules, missing seasons, and empty results. Evaluate retrieved data and final wording separately, and compare prompting strategies with model and dataset held constant.
+Controlled regression tests use independently checked reference answers from the imported snapshots. They cover the initial questions, ties, qualification rules, missing seasons, and empty results.
 
-`evaluation/reference-answers.json` contains twelve reference cases for the supplied CSV, including the initial HR/OPS questions, top-ten overlaps, ties, qualification rules, and ambiguous questions. Core statistical results were independently cross-checked using Python Decimal calculations and in-memory SQLite queries. These are developer evaluation artifacts, not browser content.
+`evaluation/reference-answers.json` contains twelve reference cases for the supplied CSV, including the initial HR/OPS questions, top-ten overlaps, ties, qualification rules, and ambiguous questions. Core statistical results were independently cross-checked using Python Decimal calculations and in-memory SQLite queries. These fixtures support the controlled regression suite.
 
 ## Verified dataset
 

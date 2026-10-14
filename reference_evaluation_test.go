@@ -2,17 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
-
-var liveEvaluationConfig = flag.String("live-config", "", "Explicit opt-in paid evaluation: administrator config path")
 
 type referenceSuite struct {
 	Cases []referenceCase `json:"cases"`
@@ -108,55 +104,4 @@ func TestTwelveHeldOutCasesThroughPublicWorkflow(t *testing.T) {
 			})
 		})
 	}
-}
-
-// This runner intentionally makes no live calls unless a config path is explicit.
-// Retrieved values and prose faithfulness require separate human review,
-// allowing equivalent projection, order and wording.
-func TestLiveReferenceEvaluation(t *testing.T) {
-	if *liveEvaluationConfig == "" {
-		t.Skip("opt-in: -live-config /path/to/config.json; makes paid model calls")
-	}
-	config, err := LoadConfig(*liveEvaluationConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ComparisonMode = true
-	db, err := OpenDatabase(config.Database)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if config.EvaluationFile == "" {
-		t.Fatal("set evaluation_file to a private report path")
-	}
-	recorder, err := OpenEvaluationRecorder(config.EvaluationFile, os.Getenv("OPENAI_API_KEY"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer recorder.Close()
-	service := NewQueryService(db, NewOpenAIModel(config.Model), config, nil)
-	service.Recorder = recorder
-	handler := NewHandler(service)
-	reportPath := filepath.Clean(config.EvaluationFile) + ".review.jsonl"
-	report, err := OpenEvaluationRecorder(reportPath, os.Getenv("OPENAI_API_KEY"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer report.Close()
-	for _, c := range loadReferenceSuite(t).Cases {
-		raw, _ := json.Marshal(QuestionRequest{Question: c.Question})
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, httptest.NewRequest("POST", "/api/questions", strings.NewReader(string(raw))))
-		var out Outcome
-		if err = json.Unmarshal(response.Body.Bytes(), &out); err != nil {
-			t.Fatal(err)
-		}
-		// Preserve full independent reference expectations alongside actual public
-		// results. Different projection/order and prose require human adjudication.
-		if err = report.write(map[string]any{"id": c.ID, "question": c.Question, "reference": c.Expected, "actual": out, "retrieved_values_review": "pending independent review", "answer_faithfulness_review": "pending independent review", "model": config.Model}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Logf("Live run recorded at %s; accuracy is pending separate data and wording review", reportPath)
 }

@@ -35,6 +35,9 @@ type pendingClarifications struct {
 func (q *QueryService) prepareQuestion(ctx context.Context, req QuestionRequest) (QuestionRequest, ResolvedIntent, *Outcome) {
 	req.Question = strings.TrimSpace(req.Question)
 	var intent ResolvedIntent
+	if q.Config.skipClarificationEnabled() {
+		return QuestionRequest{Question: req.Question}, intent, nil
+	}
 	var previousPlayers []data.PlayerCandidate
 	bad := func(message string) (QuestionRequest, ResolvedIntent, *Outcome) {
 		o := Outcome{Kind: "error", Message: message}

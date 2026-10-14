@@ -64,7 +64,7 @@ Status: approved and published. Plan positions map to GitHub issues in hosting-p
 - [ ] Preview composition uses truthful snapshot-grounded fixture responses for supported examples and explains unsupported fixture questions.
 - [ ] Preview activity uses separate authentication/state and never invokes production model services, even if an unexpected key is present.
 - [ ] Private hosted diagnostics contain bounded request/stage/error classifications, without full questions, SQL, results, answers or sensitive credentials.
-- [ ] Hosted evaluation histories are disabled; local optional evaluations continue to work.
+- [ ] Hosted evaluation histories are disabled.
 - [ ] HTTP/browser and artifact checks verify preview notices, controlled outcomes, privacy, environment separation and zero production provider calls.
 
 ## 6. Publish test-gated deployments on the custom subdomain

@@ -58,7 +58,6 @@ planned as a later extension.
 Further reading:
 
 - [Design and prompting strategies](docs/design.md)
-- [Evaluation and verification](docs/evaluation.md)
 - [Hosted setup and operation](docs/hosting/setup.md)
 - [Managing invited access](docs/hosting/access.md)
 

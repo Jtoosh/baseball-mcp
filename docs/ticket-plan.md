@@ -123,14 +123,13 @@ Published with the ready-for-agent label and verified native GitHub blocking rel
 
 **Blocked by:** [#3](https://github.com/Jtoosh/baseball-mcp/issues/3), [#6](https://github.com/Jtoosh/baseball-mcp/issues/6), [#7](https://github.com/Jtoosh/baseball-mcp/issues/7).
 
-**What it delivers:** Run reproducible evaluations through the finished request path, inspect private strategy records, and deliver the local demo and assignment evidence.
+**What it delivers:** Run reproducible controlled checks through the finished request path and deliver the local demo and assignment evidence.
 
 ### Acceptance criteria
 
-- [ ] Support optional developer-only evaluation records for question, strategy, generated SQL, results, and final answer, including useful failure outcomes; exclude API keys.
-- [ ] Keep logs and evaluation records inaccessible through public responses and static routes; verify privacy across answer, clarification, unsupported, partial, comparison, and error outcomes.
+- [ ] Keep logs inaccessible through public responses and static routes; verify privacy across answer, clarification, unsupported, partial, comparison, and error outcomes.
 - [ ] Exercise the twelve independently checked reference cases through the public workflow and evaluate retrieved values separately from answer faithfulness, allowing equivalent SQL and wording.
-- [ ] Use controlled model responses and real SQLite for ordinary automated tests. Provide an explicit optional live evaluation using the configured model, both strategies, held-out questions, and the fixed dataset.
+- [ ] Use controlled model responses and real SQLite for ordinary automated tests.
 - [ ] Include additional checks for exactly 500 rows, partial results, dense-rank/rate ties, clarification, correction exhaustion, answer-generation failure, and independent comparison outcomes.
 - [ ] Perform final browser verification for question submission, confirmation/revision, default-season disclosure, friendly statistics, optional tables, comparison labels, and error presentation.
 - [ ] Provide the database description and schema picture, reproducible import/startup/configuration guidance, successful/unsuccessful evaluation examples where available, at least six additional examples, and prompting-comparison observations from any live evaluation actually performed. Do not claim unrun live model accuracy.

@@ -85,7 +85,8 @@ func publicError(w http.ResponseWriter, status int, message string) {
 
 func NewHostedHandler(service *QueryService, options HostedOptions) http.Handler {
 	service.Config.Environment = options.Mode
-	service.Recorder = nil
+	service.Config.DeveloperSQL = false
+	service.Config.DeveloperSkipClarification = false
 	if options.Auth != nil {
 		service.Config.ClerkIssuer = options.Auth.Issuer
 	}
