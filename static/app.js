@@ -136,7 +136,8 @@ function responseContent(data, question) {
     const panel = element('article', undefined, 'panel');
     panel.append(element('h2', outcome.strategy === 'examples' ? 'With worked examples' : 'Schema and instructions'));
     panel.append(message(outcome.message, outcome.kind));
-    if (data.seasons?.length) panel.append(element('p', 'Season snapshots: ' + data.seasons.join(', ')));
+    const seasons = outcome.seasons || data.seasons;
+    if (seasons?.length) panel.append(element('p', 'Season snapshots: ' + seasons.join(', ')));
     if (outcome.kind === 'answer' && outcome.table) panel.append(supportingTable(outcome.table));
     const inspection = data.sql_inspection?.find(item => item.strategy === outcome.strategy);
     if (inspection) panel.append(sqlPanel(inspection));

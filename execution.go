@@ -10,6 +10,9 @@ import (
 // cannot discard another strategy's answer when comparison is enabled.
 func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest, input PlanInput, plan QueryPlan) (StrategyOutcome, []int) {
 	for attempt := 0; attempt < 2; attempt++ {
+		if plan.Status == "clarification" && input.SkipClarification {
+			return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: localClarificationError}, nil
+		}
 		if plan.Status != "query" {
 			return q.strategyFailure(input.Strategy, "validate query plan", errors.New("expected query plan")), nil
 		}

@@ -10,19 +10,20 @@ import (
 )
 
 type Config struct {
-	DeveloperSQL    bool            `json:"developer_sql,omitempty"`
-	PricingProfile  *PricingProfile `json:"pricing_profile,omitempty"`
-	Model           string          `json:"model"`
-	DefaultStrategy string          `json:"default_strategy"`
-	ComparisonMode  bool            `json:"comparison_mode"`
-	Database        string          `json:"database"`
-	Listen          string          `json:"listen"`
-	DeveloperLog    string          `json:"developer_log"`
-	Environment     string          `json:"environment,omitempty"`
-	ClerkIssuer     string          `json:"clerk_issuer,omitempty"`
-	ClerkPublicKey  string          `json:"clerk_publishable_key,omitempty"`
-	PublicOrigin    string          `json:"public_origin,omitempty"`
-	operationalDSN  string
+	DeveloperSkipClarification bool            `json:"developer_skip_clarification,omitempty"`
+	DeveloperSQL               bool            `json:"developer_sql,omitempty"`
+	PricingProfile             *PricingProfile `json:"pricing_profile,omitempty"`
+	Model                      string          `json:"model"`
+	DefaultStrategy            string          `json:"default_strategy"`
+	ComparisonMode             bool            `json:"comparison_mode"`
+	Database                   string          `json:"database"`
+	Listen                     string          `json:"listen"`
+	DeveloperLog               string          `json:"developer_log"`
+	Environment                string          `json:"environment,omitempty"`
+	ClerkIssuer                string          `json:"clerk_issuer,omitempty"`
+	ClerkPublicKey             string          `json:"clerk_publishable_key,omitempty"`
+	PublicOrigin               string          `json:"public_origin,omitempty"`
+	operationalDSN             string
 }
 
 //go:embed config.hosted.json

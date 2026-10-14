@@ -32,6 +32,7 @@ type Outcome struct {
 	Choices       []string          `json:"choices,omitempty"`
 }
 type StrategyOutcome struct {
+	Seasons  []int              `json:"seasons,omitempty"`
 	Strategy string             `json:"strategy"`
 	Kind     string             `json:"kind"`
 	Message  string             `json:"message"`
@@ -51,6 +52,7 @@ type QueryPlan struct {
 	Columns        []string `json:"columns"`
 }
 type PlanInput struct {
+	SkipClarification                          bool
 	Question, Interpretation, Strategy, Schema string
 	Seasons                                    []int
 	PreviousSQL, DatabaseError                 string
@@ -82,6 +84,7 @@ func NewQueryService(db *Database, model Model, config Config, logger *log.Logge
 	return &QueryService{DB: db, Model: model, Config: config, Logger: logger}
 }
 func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Outcome) {
+	skipClarification := q.Config.skipClarificationEnabled()
 	strategies := []string{q.Config.DefaultStrategy}
 	if q.Config.ComparisonMode {
 		other := StrategyExamples
@@ -124,13 +127,14 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 		return *pending
 	}
 	type candidate struct {
+		intent   ResolvedIntent
 		strategy string
 		plan     QueryPlan
 		failure  *StrategyOutcome
 	}
 	candidates := make([]candidate, 0, len(strategies))
 	inputFor := func(strategy string) PlanInput {
-		return PlanInput{Question: req.Question, Interpretation: intent.Interpretation, Strategy: strategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent}
+		return PlanInput{SkipClarification: skipClarification, Question: req.Question, Interpretation: intent.Interpretation, Strategy: strategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent}
 	}
 	// Resolve all strategy plans before executing any: either can identify an
 	// ambiguity, and an initial planning failure must not suppress the other.
@@ -148,6 +152,11 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 		}
 		switch plan.Status {
 		case "clarification":
+			if skipClarification {
+				failure := StrategyOutcome{Strategy: strategy, Kind: "error", Message: localClarificationError}
+				item.failure = &failure
+				break
+			}
 			if !q.safePublicText(plan.Message) {
 				return q.failure("validate clarification", errors.New("private clarification"))
 			}
@@ -173,13 +182,21 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 				item.failure = &failure
 				break
 			}
-			if intent.Interpretation == "" {
-				intent.Interpretation = plan.Interpretation
-				if intent.Interpretation == "" {
-					intent.Interpretation = req.Question
+			if skipClarification {
+				meaning := plan.Interpretation
+				if meaning == "" {
+					meaning = req.Question
 				}
+				item.intent = ResolvedIntent{Interpretation: meaning, Seasons: plan.Seasons}
+			} else {
+				if intent.Interpretation == "" {
+					intent.Interpretation = plan.Interpretation
+					if intent.Interpretation == "" {
+						intent.Interpretation = req.Question
+					}
+				}
+				intent.Seasons = plan.Seasons
 			}
-			intent.Seasons = plan.Seasons
 			item.plan = plan
 		default:
 			failure := q.strategyFailure(strategy, "validate query plan", errors.New("unknown plan status"))
@@ -194,7 +211,16 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 		if item.failure != nil {
 			result = *item.failure
 		} else {
-			result, _ = q.executeStrategy(ctx, req, inputFor(item.strategy), item.plan)
+			strategyRequest, input := req, inputFor(item.strategy)
+			if skipClarification {
+				strategyRequest.Interpretation = item.intent.Interpretation
+				input.Interpretation = item.intent.Interpretation
+				input.ResolvedIntent = &item.intent
+			}
+			result, _ = q.executeStrategy(ctx, strategyRequest, input, item.plan)
+			if skipClarification {
+				result.Seasons = item.plan.Seasons
+			}
 		}
 		out.Strategies = append(out.Strategies, result)
 		if result.Kind == "answer" {

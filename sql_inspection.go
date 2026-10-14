@@ -16,10 +16,20 @@ type SQLAttempt struct {
 	Failed bool   `json:"failed,omitempty"`
 }
 
+const localClarificationError = "The model requested clarification instead of generating a query. Please try again."
+
 type sqlInspectionKey struct{}
 
 func (c Config) sqlInspectionEnabled() bool {
-	if !c.DeveloperSQL || (c.Environment != "" && c.Environment != "local") {
+	return c.DeveloperSQL && c.localLoopback()
+}
+
+func (c Config) skipClarificationEnabled() bool {
+	return c.DeveloperSkipClarification && c.localLoopback()
+}
+
+func (c Config) localLoopback() bool {
+	if c.Environment != "" && c.Environment != "local" {
 		return false
 	}
 	host, _, err := net.SplitHostPort(c.Listen)
