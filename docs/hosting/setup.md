@@ -7,8 +7,8 @@ The hosting implementation keeps local configuration private and adds a separate
 - Hobby team: `jtooshs-projects`; linked project: `baseball-mcp`.
 - Go framework, gated build command and Vercel deployment protection are configured.
 - `baseball.jamesteuscher.click` is attached to this project. Existing apex DNS and the `exercise-app` project are untouched.
-- DNS still requires owner action at Spaceship: the project currently recommends CNAME `baseball` → `ae774825b448a93a.vercel-dns-017.com.` Recheck with `npx vercel domains verify baseball.jamesteuscher.click --scope jtooshs-projects` before editing.
-- GitHub project/org variables are set, and automatic publishing is initially disabled until credentials and smoke checks are complete.
+- DNS and HTTPS are verified for CNAME `baseball` → `ae774825b448a93a.vercel-dns-017.com.` Recheck with `npx vercel domains verify baseball.jamesteuscher.click --scope jtooshs-projects` before future DNS changes.
+- GitHub project/org variables are set. Automatic test-gated publishing is enabled after successful Preview and Production smoke checks.
 
 ## Owner-only setup
 
@@ -40,4 +40,4 @@ Twenty newly admitted questions per user are allowed in a rolling hour. Valid cl
 
 Hosted errors go to administrator runtime logs with bounded stage/class identifiers. Raw prompts, SQL, tables, answers and connection/provider errors are not logged. Full evaluation histories are disabled in hosting; the local optional evaluation workflow remains available. Operational records contain confirmation state, admissions, leases and budget accounting only. Expired confirmations are inaccessible immediately and removed during subsequent confirmation creation; old hourly admissions are pruned on admission.
 
-At implementation time, real local PostgreSQL and SQLite integration tests and controlled SDK/auth transports are verified. Vercel project linkage/protection/framework settings and the subdomain attachment are verified. Live Clerk/Neon provisioning, email delivery, DNS/HTTPS, actual cloud build/publication and live model smoke checks remain unverified until owner credentials and DNS are configured. Do not interpret prepared code or deterministic fixtures as a completed production deployment.
+Real PostgreSQL and SQLite integration tests, controlled SDK/auth transports, and actual Vercel test-gated cloud builds/publication are verified. The custom domain serves Production over HTTPS with live Clerk settings and Neon connectivity. The owner confirmed successful Preview sign-in/questions and successful Production operation after configuring live Clerk access. Actual dashboard removal/reapproval remains covered by deterministic tests rather than a reported live account-removal check. Production smoke questions use the same allowance guard as ordinary questions; no agent-submitted paid calls were used during provisioning.
