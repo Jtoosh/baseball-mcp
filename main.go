@@ -51,14 +51,6 @@ func main() {
 	}
 	defer db.Close()
 	service := NewQueryService(db, NewOpenAIModel(config.Model), config, log.New(file, "", log.LstdFlags))
-	if config.EvaluationFile != "" {
-		recorder, err := OpenEvaluationRecorder(config.EvaluationFile, os.Getenv("OPENAI_API_KEY"))
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer recorder.Close()
-		service.Recorder = recorder
-	}
 	// Two strategies can each spend 60s planning, 60s correcting, 60s
 	// summarizing, and 20s executing. Leave room for the bounded full workflow.
 	server := http.Server{Addr: config.Listen, Handler: NewHandler(service), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 8 * time.Minute}

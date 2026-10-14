@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jtoosh/baseball-mcp/internal/data"
 )
@@ -24,12 +23,13 @@ type QuestionRequest struct {
 	Choice         string `json:"choice,omitempty"`
 }
 type Outcome struct {
-	Kind         string            `json:"kind"`
-	Message      string            `json:"message,omitempty"`
-	Seasons      []int             `json:"seasons,omitempty"`
-	Strategies   []StrategyOutcome `json:"strategies,omitempty"`
-	Confirmation string            `json:"confirmation,omitempty"`
-	Choices      []string          `json:"choices,omitempty"`
+	SQLInspection []SQLInspection   `json:"sql_inspection,omitempty"`
+	Kind          string            `json:"kind"`
+	Message       string            `json:"message,omitempty"`
+	Seasons       []int             `json:"seasons,omitempty"`
+	Strategies    []StrategyOutcome `json:"strategies,omitempty"`
+	Confirmation  string            `json:"confirmation,omitempty"`
+	Choices       []string          `json:"choices,omitempty"`
 }
 type StrategyOutcome struct {
 	Strategy string             `json:"strategy"`
@@ -70,28 +70,33 @@ type Model interface {
 	Answer(context.Context, AnswerInput) (AnswerPresentation, error)
 }
 type QueryService struct {
-	DB       *Database
-	Model    Model
-	Config   Config
-	Logger   *log.Logger
-	Recorder *EvaluationRecorder
-	pending  pendingClarifications
-	State    *OperationalStore
+	DB      *Database
+	Model   Model
+	Config  Config
+	Logger  *log.Logger
+	pending pendingClarifications
+	State   *OperationalStore
 }
 
 func NewQueryService(db *Database, model Model, config Config, logger *log.Logger) *QueryService {
 	return &QueryService{DB: db, Model: model, Config: config, Logger: logger}
 }
 func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Outcome) {
-	if q.Recorder != nil {
-		record := &EvaluationRecord{Time: time.Now().UTC(), Question: req.Question}
-		ctx = context.WithValue(ctx, evaluationContextKey{}, record)
-		defer func() {
-			record.Outcome = outcome
-			if err := q.Recorder.write(record); err != nil {
-				q.logFailure("record evaluation", err)
-			}
-		}()
+	strategies := []string{q.Config.DefaultStrategy}
+	if q.Config.ComparisonMode {
+		other := StrategyExamples
+		if strategies[0] == StrategyExamples {
+			other = StrategySchema
+		}
+		strategies = append(strategies, other)
+	}
+	if q.Config.sqlInspectionEnabled() {
+		inspections := make([]SQLInspection, 0, len(strategies))
+		for _, strategy := range strategies {
+			inspections = append(inspections, SQLInspection{Strategy: strategy, Queries: []SQLAttempt{}})
+		}
+		ctx = context.WithValue(ctx, sqlInspectionKey{}, inspections)
+		defer func() { outcome.SQLInspection = inspections }()
 	}
 	if strings.TrimSpace(req.Question) == "" || len(req.Question) > 4000 {
 		return Outcome{Kind: "error", Message: "Please enter a baseball statistics question of at most 4,000 characters."}
@@ -118,14 +123,6 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 	if pending != nil {
 		return *pending
 	}
-	strategies := []string{q.Config.DefaultStrategy}
-	if q.Config.ComparisonMode {
-		other := StrategyExamples
-		if strategies[0] == StrategyExamples {
-			other = StrategySchema
-		}
-		strategies = append(strategies, other)
-	}
 	type candidate struct {
 		strategy string
 		plan     QueryPlan
@@ -139,7 +136,10 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 	// ambiguity, and an initial planning failure must not suppress the other.
 	for _, strategy := range strategies {
 		item := candidate{strategy: strategy}
-		plan, err := q.plan(ctx, inputFor(strategy))
+		plan, err := q.Model.Plan(ctx, inputFor(strategy))
+		if err == nil {
+			inspectPlan(ctx, strategy, plan.SQL)
+		}
 		if err != nil {
 			failure := q.strategyFailure(strategy, "interpret question", err)
 			item.failure = &failure

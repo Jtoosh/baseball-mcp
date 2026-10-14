@@ -80,6 +80,18 @@ function supportingTable(data) {
   wrapper.append(table);
   return wrapper;
 }
+function sqlPanel(inspection) {
+  const panel = element('details', undefined, 'sql-panel');
+  panel.append(element('summary', 'SQL query'));
+  if (!inspection.queries.length) panel.append(element('p', 'No SQL generated'));
+  inspection.queries.forEach((query, index) => {
+    panel.append(element('p', (index === 0 ? 'Initial SQL' : 'Corrected SQL') + (query.failed ? ' — failed' : '')));
+    const pre = element('pre');
+    pre.append(element('code', query.sql));
+    panel.append(pre);
+  });
+  return panel;
+}
 function responseContent(data, question) {
   const content = document.createDocumentFragment();
   content.append(element('p', 'Response to: ' + question, 'response-question'));
@@ -126,6 +138,15 @@ function responseContent(data, question) {
     panel.append(message(outcome.message, outcome.kind));
     if (data.seasons?.length) panel.append(element('p', 'Season snapshots: ' + data.seasons.join(', ')));
     if (outcome.kind === 'answer' && outcome.table) panel.append(supportingTable(outcome.table));
+    const inspection = data.sql_inspection?.find(item => item.strategy === outcome.strategy);
+    if (inspection) panel.append(sqlPanel(inspection));
+    content.append(panel);
+  }
+  for (const inspection of data.sql_inspection || []) {
+    if (data.strategies?.some(outcome => outcome.strategy === inspection.strategy)) continue;
+    const panel = element('article', undefined, 'panel');
+    panel.append(element('h2', inspection.strategy === 'examples' ? 'With worked examples' : 'Schema and instructions'));
+    panel.append(sqlPanel(inspection));
     content.append(panel);
   }
   return content;

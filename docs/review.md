@@ -42,5 +42,4 @@ Three findings:
 Each behavioral fix began with a failing public HTTP regression, using real
 SQLite and controlled model responses. The complete suite, race detector,
 `go vet ./...`, and `git diff --check` passed after the fixes. Native browser
-checks use controlled model output and real SQLite; see `docs/evaluation.md` for
-scope. No paid model calls or live-accuracy claims were made.
+checks use controlled model output and real SQLite. No paid model calls or live-accuracy claims were made.

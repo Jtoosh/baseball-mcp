@@ -78,9 +78,6 @@ func hostedConfig(c Config) (Config, error) {
 	if !strings.HasPrefix(secret, expected) || os.Getenv("DATABASE_URL") == "" {
 		return c, errors.New("hosted authentication and state credentials required")
 	}
-	if c.EvaluationFile != "" {
-		return c, errors.New("hosted evaluation histories are disabled")
-	}
 	return c, nil
 }
 

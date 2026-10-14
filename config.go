@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	DeveloperSQL    bool            `json:"developer_sql,omitempty"`
 	PricingProfile  *PricingProfile `json:"pricing_profile,omitempty"`
 	Model           string          `json:"model"`
 	DefaultStrategy string          `json:"default_strategy"`
@@ -17,7 +18,6 @@ type Config struct {
 	Database        string          `json:"database"`
 	Listen          string          `json:"listen"`
 	DeveloperLog    string          `json:"developer_log"`
-	EvaluationFile  string          `json:"evaluation_file,omitempty"`
 	Environment     string          `json:"environment,omitempty"`
 	ClerkIssuer     string          `json:"clerk_issuer,omitempty"`
 	ClerkPublicKey  string          `json:"clerk_publishable_key,omitempty"`
