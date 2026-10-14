@@ -70,9 +70,10 @@ func hostedConfig(c Config) (Config, error) {
 	if c.Environment == "production" {
 		expected = "sk_live_"
 	}
-	connection, connectionErr := url.Parse(os.Getenv("DATABASE_URL"))
-	if connectionErr != nil || (connection.Scheme != "postgres" && connection.Scheme != "postgresql") || connection.Host == "" || connection.Query().Get("sslmode") != "verify-full" {
-		return c, errors.New("hosted operational connection requires verified TLS")
+	var connectionErr error
+	c.operationalDSN, connectionErr = verifiedOperationalDSN(os.Getenv("DATABASE_URL"))
+	if connectionErr != nil {
+		return c, connectionErr
 	}
 	if !strings.HasPrefix(secret, expected) || os.Getenv("DATABASE_URL") == "" {
 		return c, errors.New("hosted authentication and state credentials required")
@@ -82,6 +83,28 @@ func hostedConfig(c Config) (Config, error) {
 	}
 	return c, nil
 }
+
+// Managed Neon URLs use sslmode=require. Strengthen the connection locally
+// instead of asking owners to edit integration-managed credentials.
+func verifiedOperationalDSN(dsn string) (string, error) {
+	connection, err := url.Parse(dsn)
+	if err != nil || (connection.Scheme != "postgres" && connection.Scheme != "postgresql") || connection.Hostname() == "" || connection.Fragment != "" {
+		return "", errors.New("invalid hosted operational connection configuration")
+	}
+	query, err := url.ParseQuery(connection.RawQuery)
+	if err != nil {
+		return "", errors.New("invalid hosted operational connection configuration")
+	}
+	switch query.Get("sslmode") {
+	case "", "require", "verify-ca", "verify-full":
+		query.Set("sslmode", "verify-full")
+	default:
+		return "", errors.New("hosted operational connection requires verified TLS")
+	}
+	connection.RawQuery = query.Encode()
+	return connection.String(), nil
+}
+
 func startHosted(c Config) (http.Handler, func(), error) {
 	db, cleanup, err := OpenHostedSnapshot()
 	if err != nil {
@@ -89,7 +112,7 @@ func startHosted(c Config) (http.Handler, func(), error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	state, err := OpenOperationalStore(ctx, os.Getenv("DATABASE_URL"), c.Environment)
+	state, err := OpenOperationalStore(ctx, c.operationalDSN, c.Environment)
 	if err != nil {
 		cleanup()
 		return nil, nil, errors.New("hosted operational storage unavailable")

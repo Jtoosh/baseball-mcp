@@ -16,7 +16,7 @@ Run `bash scripts/setup-hosting.sh` in a private terminal. It opens the provider
 
 Use free plans with upgrades disabled. Production and preview require `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_ISSUER`, and `DATABASE_URL`. Production also requires `PUBLIC_ORIGIN=https://baseball.jamesteuscher.click` and `OPENAI_API_KEY`. Preview derives its exact origin from `VERCEL_URL` and ignores any OpenAI key. See [invited access](access.md) for invitation and private approval metadata settings. Provision the production Clerk domain and its required DNS records using Clerk's current dashboard instructions; they are separate from the baseball CNAME.
 
-The application uses the PostgreSQL URLs only on the server. Use pooled URLs with `sslmode=verify-full`; ordinary tests use a separate local PostgreSQL service. Hosted startup creates the operational schema transactionally, checks its version and denies startup on unavailable/incompatible state. No batting statistics enter PostgreSQL.
+The application uses the PostgreSQL URLs only on the server. Use pooled URLs. Hosted startup strengthens Neon's managed `sslmode=require` URLs to `verify-full` in memory, requiring certificate and hostname verification without a plaintext fallback; you do not need to edit integration-owned variables. Explicitly insecure SSL modes are rejected. Ordinary tests use a separate local PostgreSQL service. Hosted startup creates the operational schema transactionally, checks its version and denies startup on unavailable/incompatible state. No batting statistics enter PostgreSQL.
 
 ## Verify before enabling automatic production
 

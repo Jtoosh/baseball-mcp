@@ -22,6 +22,7 @@ type Config struct {
 	ClerkIssuer     string          `json:"clerk_issuer,omitempty"`
 	ClerkPublicKey  string          `json:"clerk_publishable_key,omitempty"`
 	PublicOrigin    string          `json:"public_origin,omitempty"`
+	operationalDSN  string
 }
 
 //go:embed config.hosted.json

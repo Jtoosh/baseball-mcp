@@ -238,7 +238,7 @@ put_vercel PUBLIC_ORIGIN https://baseball.jamesteuscher.click production config
 stage "Separate free Neon operational databases"
 open_url "https://console.neon.tech/"
 step "Create/select a free project. Create separate production and preview databases/roles; do not enable a paid plan or upgrades."
-step "Open Connect for each database. Copy pooled PostgreSQL URLs with TLS; use sslmode=verify-full."
+step "Open Connect for each database. Copy pooled PostgreSQL URLs with TLS; the app enforces sslmode=verify-full for managed Neon URLs."
 ask_secret PRODUCTION_DATABASE_URL "Production database URL (hidden):"
 ask_secret PREVIEW_DATABASE_URL "Preview database URL (hidden):"
 [[ "$PRODUCTION_DATABASE_URL" != "$PREVIEW_DATABASE_URL" ]] || { warn "Use separate database credentials for preview and production."; exit 1; }
