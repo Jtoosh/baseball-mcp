@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"time"
 
@@ -30,11 +31,24 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		}
 		correctedIDs := slices.Clone(plan.LookupPlayerIDs)
 		slices.Sort(correctedIDs)
-		if !slices.Equal(lookupIDs, correctedIDs) {
-			return q.strategyFailure(input.Strategy, "validate corrected players", errors.New("strategy changed the resolved player identities")), nil
+		// Corrections may add an omitted requested identity, but cannot replace
+		// one already selected. Catalog validation below rejects unrelated IDs.
+		for _, id := range lookupIDs {
+			if !slices.Contains(correctedIDs, id) {
+				return q.strategyFailure(input.Strategy, "validate corrected players", errors.New("strategy changed the resolved player identities")), nil
+			}
 		}
+		lookupIDs = correctedIDs
 		executionCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		result, err := q.DB.Query(executionCtx, plan.SQL)
+		var result QueryResult
+		var err error
+		if input.RequireComparisonCoverage && len(lookupIDs) == 0 {
+			err = errors.New("player-season coverage: direct comparison must identify every requested catalog player in lookup_player_ids")
+		} else if len(lookupIDs) > 0 {
+			result, err = q.DB.QueryPlayerLookup(executionCtx, plan.SQL)
+		} else {
+			result, err = q.DB.Query(executionCtx, plan.SQL)
+		}
 		cancel()
 		stage := "execute query"
 		var table *PresentationTable
@@ -88,6 +102,11 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 	}
 	return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: questionFailureMessage}, nil
 }
+
+// Explicit comparisons cannot opt out of coverage by omitting model metadata.
+// Questions asking for a ranking or filtered portion retain their normal flow.
+var directComparison = regexp.MustCompile(`(?i)\b(compare|comparison|versus|vs)\b`)
+var filteredComparison = regexp.MustCompile(`(?i)\b(rank|ranked|ranking|leaders?)\b|\b(only\s+)?(show|return|list|include|select)\s+(only\s+)?(the\s+)?(players?|hitters?|those)\s+(who\b|with\s+(more|fewer|higher|lower|most|least|highest|lowest|at least|at most|above|below|over|under)\b)|\b(show|return|list|include|select)\s+(only\s+)?(the\s+)?top\s+\d+\b|\b(players?|hitters?)\s+(with|having)\s+(at least|at most|more than|fewer than|greater than|less than|above|below|over|under)\s+\d+\b`)
 
 func (q *QueryService) validateSeasons(seasons []int) error {
 	if len(seasons) == 0 {

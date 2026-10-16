@@ -19,9 +19,13 @@ when several IDs share a search key; retain the application's existing player
 ambiguity behavior instead of silently merging their statistics.
 
 The planner marks direct lookups with `lookup_player_ids`; rankings and
-intentional filtered subsets leave that list empty. The server validates those
-IDs against the matched catalog and checks stored name and season columns for
-coverage. A correction cannot drop or change the selected identities.
+intentional filtered subsets leave that list empty. Explicit comparison wording
+also requires coverage, so an empty model ID list cannot disable that check.
+The query includes a private verification ID that the server removes before
+answer generation and presentation. Coverage is checked by that ID and season,
+so two players sharing a name cannot satisfy each other's lookup. A correction
+cannot drop or replace a selected identity. Name-free clarification revisions
+retain their confirmed identity and the original question's other players.
 
 Before summarizing a direct player comparison, check that its results cover
 every resolved player-season requested. If an existing record was omitted, use

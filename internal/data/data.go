@@ -228,6 +228,7 @@ type Result struct {
 	Origins   []string
 	Rows      [][]any
 	Truncated bool
+	playerIDs []int64 // Private lookup verification; never serialized or presented.
 }
 
 func Open(path string) (*Database, error) {
@@ -284,6 +285,16 @@ func Open(path string) (*Database, error) {
 }
 func (d *Database) Close() error { return nil }
 func (d *Database) Query(ctx context.Context, sql string) (Result, error) {
+	return d.query(ctx, sql, false)
+}
+
+// QueryPlayerLookup removes its required source identity column from the public
+// result before presentation or answer generation.
+func (d *Database) QueryPlayerLookup(ctx context.Context, sql string) (Result, error) {
+	return d.query(ctx, sql, true)
+}
+
+func (d *Database) query(ctx context.Context, sql string, captureIdentity bool) (Result, error) {
 	result := Result{Rows: [][]any{}}
 	if strings.ContainsRune(sql, 0) {
 		return result, errors.New("invalid query")
@@ -344,30 +355,42 @@ func (d *Database) Query(ctx context.Context, sql string) (Result, error) {
 		}
 		tail = next
 	}
+	identityColumn := -1
 	for i := 0; i < stmt.ColumnCount(); i++ {
-		result.Columns = append(result.Columns, stmt.ColumnName(i))
 		origin := stmt.ColumnOriginName(i)
 		if origin == "player_id" {
-			return result, errors.New("identity columns are private")
+			if !captureIdentity || identityColumn >= 0 {
+				return result, errors.New("identity columns are private; a lookup requires exactly one private source identity")
+			}
+			identityColumn = i
+			continue
 		}
+		result.Columns = append(result.Columns, stmt.ColumnName(i))
 		result.Origins = append(result.Origins, origin)
+	}
+	if captureIdentity && identityColumn < 0 {
+		return result, errors.New("player lookup must select one stored player_id as a private verification column; omit it from public column meanings")
 	}
 	for stmt.Step() {
 		if len(result.Rows) == 500 {
 			result.Truncated = true
 			break
 		}
-		row := make([]any, stmt.ColumnCount())
-		for i := range row {
+		row := make([]any, 0, len(result.Columns))
+		for i := 0; i < stmt.ColumnCount(); i++ {
+			if i == identityColumn {
+				result.playerIDs = append(result.playerIDs, stmt.ColumnInt64(i))
+				continue
+			}
 			switch stmt.ColumnType(i) {
 			case sqlite3.INTEGER:
-				row[i] = stmt.ColumnInt64(i)
+				row = append(row, stmt.ColumnInt64(i))
 			case sqlite3.FLOAT:
-				row[i] = stmt.ColumnFloat(i)
+				row = append(row, stmt.ColumnFloat(i))
 			case sqlite3.TEXT:
-				row[i] = stmt.ColumnText(i)
+				row = append(row, stmt.ColumnText(i))
 			case sqlite3.NULL:
-				row[i] = nil
+				row = append(row, nil)
 			default:
 				return result, errors.New("unsupported result value")
 			}

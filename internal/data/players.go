@@ -57,12 +57,13 @@ func containsPlayerName(question, key string) bool {
 }
 
 // MatchedPlayers returns all database identities whose complete normalized name
-// appears in the question. Colliding keys retain every distinct player ID.
-func (d *Database) MatchedPlayers(question string) []PlayerCandidate {
+// appears in the question, plus an optional server-confirmed identity. Colliding
+// keys retain every distinct player ID.
+func (d *Database) MatchedPlayers(question string, confirmedID int64) []PlayerCandidate {
 	question = normalizePlayerText(question)
 	var players []PlayerCandidate
 	for _, player := range d.players {
-		if containsPlayerName(question, player.key) {
+		if player.candidate.ID == confirmedID || containsPlayerName(question, player.key) {
 			candidate := player.candidate
 			candidate.Seasons = append([]PlayerSeasonDescription(nil), candidate.Seasons...)
 			players = append(players, candidate)
@@ -75,7 +76,7 @@ func (d *Database) AmbiguousPlayers(ctx context.Context, question string) ([]Pla
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	matched := d.MatchedPlayers(question)
+	matched := d.MatchedPlayers(question, 0)
 	counts := map[string]int{}
 	for _, player := range matched {
 		counts[normalizePlayerText(player.Name)]++
@@ -108,7 +109,7 @@ func (d *Database) MentionsPlayer(ctx context.Context, question string) (bool, e
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	return len(d.MatchedPlayers(question)) > 0, nil
+	return len(d.MatchedPlayers(question, 0)) > 0, nil
 }
 
 // MissingPlayerSeason is safe answer context for an actually absent record.
@@ -131,6 +132,7 @@ func VerifyPlayerCoverage(candidates []PlayerCandidate, ids []int64, seasons []i
 		requestedNames[normalizePlayerText(candidate.Name)] = false
 	}
 	selected := make([]PlayerCandidate, 0, len(ids))
+	selectedIDs := map[int64]bool{}
 	for _, id := range ids {
 		candidate, ok := byID[id]
 		if !ok {
@@ -141,6 +143,7 @@ func VerifyPlayerCoverage(candidates []PlayerCandidate, ids []int64, seasons []i
 			return nil, fmt.Errorf("player-season coverage: repeated or ambiguous lookup identity")
 		}
 		requestedNames[key] = true
+		selectedIDs[id] = true
 		selected = append(selected, candidate)
 	}
 	for _, found := range requestedNames {
@@ -163,17 +166,25 @@ func VerifyPlayerCoverage(candidates []PlayerCandidate, ids []int64, seasons []i
 		return nil, fmt.Errorf("player-season coverage: select stored name, year and pa for a complete lookup")
 	}
 	type playerSeason struct {
-		name string
+		id   int64
 		year int
 	}
+	if len(result.playerIDs) != len(result.Rows) {
+		return nil, fmt.Errorf("player-season coverage: missing private result identities")
+	}
 	returned := map[playerSeason]bool{}
-	for _, row := range result.Rows {
+	for i, row := range result.Rows {
 		name, nameOK := row[nameColumn].(string)
 		year, yearOK := row[yearColumn].(int64)
-		if !nameOK || !yearOK {
+		id := result.playerIDs[i]
+		candidate, known := byID[id]
+		if !nameOK || !yearOK || !known || !selectedIDs[id] || candidate.Name != name {
 			return nil, fmt.Errorf("player-season coverage: invalid name or season")
 		}
-		returned[playerSeason{name, int(year)}] = true
+		if returned[playerSeason{id, int(year)}] {
+			return nil, fmt.Errorf("player-season coverage: repeated player-season")
+		}
+		returned[playerSeason{id, int(year)}] = true
 	}
 	var missing []MissingPlayerSeason
 	for _, candidate := range selected {
@@ -186,7 +197,7 @@ func VerifyPlayerCoverage(candidates []PlayerCandidate, ids []int64, seasons []i
 				}
 			}
 			if available {
-				if !returned[playerSeason{candidate.Name, year}] {
+				if !returned[playerSeason{candidate.ID, year}] {
 					return nil, fmt.Errorf("player-season coverage: query omitted available statistics for %s in %d; filter by the supplied player IDs", candidate.Name, year)
 				}
 			} else {

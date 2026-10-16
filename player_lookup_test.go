@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -44,7 +45,7 @@ func playerLookupApp(t *testing.T, respond func(string, string) any, source ...s
 	return testApp(t, model, source...)
 }
 
-const playerComparisonSQL = `SELECT p.name,s.year,s.home_run,s.on_base_plus_slg,s.pa FROM players p JOIN stats s ON p.player_id=s.player_id WHERE p.player_id IN (608070,691406) AND s.year=2026 ORDER BY p.name`
+const playerComparisonSQL = `SELECT p.name,s.year,s.home_run,s.on_base_plus_slg,s.pa,p.player_id FROM players p JOIN stats s ON p.player_id=s.player_id WHERE p.player_id IN (608070,691406) AND s.year=2026 ORDER BY p.name`
 
 func TestQuestionRecognizesUnaccentedPlayerComparison(t *testing.T) {
 	for _, mode := range []string{"local", "production"} {
@@ -279,17 +280,21 @@ func TestQuestionDescribesGenuinelyMissingPlayerSeason(t *testing.T) {
 }
 
 func TestQuestionDoesNotRequireEveryPlayerInIntentionalFilteredSubset(t *testing.T) {
-	plans := 0
-	_, app := playerLookupApp(t, func(kind, input string) any {
-		if kind == "query_plan" {
-			plans++
-			return QueryPlan{Status: "query", SQL: playerComparisonSQL + " LIMIT 1", Seasons: []int{2026}, LookupPlayerIDs: []int64{}}
-		}
-		return AnswerPresentation{Text: "Junior Caminero had more home runs in the 2026 snapshot."}
-	})
-	got := askPublic(t, app, QuestionRequest{Question: "Among Jose Ramirez and Junior Caminero, show only the player with more home runs in 2026"})
-	if got.Kind != "answer" || plans != 1 {
-		t.Fatalf("intentional subset rejected: %+v plans=%d", got, plans)
+	for _, question := range []string{"Among Jose Ramirez and Junior Caminero, show only the player with more home runs in 2026", "Compare Jose Ramirez and Junior Caminero, but only show the player with more home runs in 2026"} {
+		t.Run(question, func(t *testing.T) {
+			plans := 0
+			_, app := playerLookupApp(t, func(kind, input string) any {
+				if kind == "query_plan" {
+					plans++
+					return QueryPlan{Status: "query", SQL: strings.Replace(playerComparisonSQL, ",p.player_id FROM", " FROM", 1) + " LIMIT 1", Seasons: []int{2026}, LookupPlayerIDs: []int64{}}
+				}
+				return AnswerPresentation{Text: "Junior Caminero had more home runs in the 2026 snapshot."}
+			})
+			got := askPublic(t, app, QuestionRequest{Question: question})
+			if got.Kind != "answer" || plans != 1 {
+				t.Fatalf("intentional subset rejected: %+v plans=%d", got, plans)
+			}
+		})
 	}
 }
 
@@ -347,5 +352,149 @@ func TestHostedQuestionResolvesUnaccentedComparison(t *testing.T) {
 	}
 	if response.Code != 200 || got.Kind != "answer" || !strings.Contains(got.Strategies[0].Message, "José Ramírez") {
 		t.Fatalf("hosted comparison failed: %s", response.Body.String())
+	}
+}
+
+func TestQuestionCorrectsWrongSameNameIdentityBeforeAnswering(t *testing.T) {
+	for _, combine := range []bool{false, true} {
+		t.Run(fmt.Sprint("combined identities: ", combine), func(t *testing.T) {
+			plans, answers := 0, 0
+			_, app := playerLookupApp(t, func(kind, input string) any {
+				if kind == "query_plan" {
+					plans++
+					id := 571970
+					if plans == 2 {
+						id = 691777
+					}
+					sql := fmt.Sprintf("SELECT p.name,s.year,s.on_base_plus_slg,s.pa,p.player_id FROM players p JOIN stats s ON s.player_id=p.player_id WHERE p.player_id=%d AND s.year=2026", id)
+					if plans == 1 && combine {
+						sql = strings.Replace(sql, "p.player_id=571970", "p.player_id IN (571970,691777)", 1)
+					}
+					return QueryPlan{Status: "query", SQL: sql, Seasons: []int{2026}, LookupPlayerIDs: []int64{691777}}
+				}
+				answers++
+				if strings.Contains(input, "691777") || strings.Contains(input, "571970") {
+					t.Error("private row identities reached the answer provider")
+				}
+				var answer struct {
+					Table PresentationTable `json:"table"`
+				}
+				json.Unmarshal([]byte(input), &answer)
+				if len(answer.Table.Rows) != 1 || answer.Table.Rows[0][2] != "0.683" {
+					t.Errorf("wrong same-name identity reached answer: %v", answer.Table.Rows)
+				}
+				return AnswerPresentation{Text: "The younger Max Muncy had .683 OPS in 2026 over 284 PA."}
+			})
+			got := askPublic(t, app, QuestionRequest{Question: "What was Max Muncy's OPS in 2026, the player age 23?"})
+			if got.Kind != "answer" || plans != 2 || answers != 1 {
+				t.Fatalf("same-name correction failed: %+v plans=%d answers=%d", got, plans, answers)
+			}
+		})
+	}
+}
+
+func TestQuestionRetainsResolvedIdentityInNameFreeRevision(t *testing.T) {
+	_, app := playerLookupApp(t, func(kind, input string) any {
+		if kind == "query_plan" {
+			if !strings.Contains(input, "Muncy, Max") || !strings.Contains(input, "691777") {
+				t.Error("name-free revision lost the resolved catalog identity")
+			}
+			return QueryPlan{Status: "query", SQL: `SELECT p.name,s.year,s.on_base_plus_slg,s.pa,p.player_id FROM players p JOIN stats s ON s.player_id=p.player_id WHERE p.player_id=691777 AND s.year=2026`, Seasons: []int{2026}, LookupPlayerIDs: []int64{691777}}
+		}
+		return AnswerPresentation{Text: "Max Muncy, age 23, had .683 OPS over 284 PA in 2026."}
+	})
+	question := "What was Max Muncy's OPS in 2026?"
+	pending := askPublic(t, app, QuestionRequest{Question: question})
+	if pending.Kind != "clarification" {
+		t.Fatalf("expected player clarification: %+v", pending)
+	}
+	got := askPublic(t, app, QuestionRequest{Question: question, Confirmation: pending.Confirmation, Revision: "I meant the player age 23"})
+	if got.Kind != "answer" || got.Strategies[0].Table.Rows[0][2] != "0.683" {
+		t.Fatalf("resolved identity lost in revision: %+v", got)
+	}
+}
+
+func TestQuestionCannotBypassComparisonCoverageWithEmptyModelIdentities(t *testing.T) {
+	for _, initialIDs := range [][]int64{{}, {691406}} {
+		t.Run(fmt.Sprint("initial identities: ", initialIDs), func(t *testing.T) {
+			plans, answers := 0, 0
+			_, app := playerLookupApp(t, func(kind, input string) any {
+				if kind == "query_plan" {
+					plans++
+					if plans == 1 {
+						sql := strings.Replace(playerComparisonSQL, "IN (608070,691406)", "IN (691406)", 1)
+						if len(initialIDs) == 0 {
+							sql = strings.Replace(sql, ",p.player_id FROM", " FROM", 1)
+						}
+						return QueryPlan{Status: "query", SQL: sql, Seasons: []int{2026}, LookupPlayerIDs: initialIDs}
+					}
+					return QueryPlan{Status: "query", SQL: playerComparisonSQL, Seasons: []int{2026}, LookupPlayerIDs: []int64{608070, 691406}}
+				}
+				answers++
+				var answer struct {
+					Table PresentationTable `json:"table"`
+				}
+				json.Unmarshal([]byte(input), &answer)
+				if len(answer.Table.Rows) != 2 {
+					t.Error("empty metadata bypassed comparison coverage")
+				}
+				return AnswerPresentation{Text: "Both players' 2026 snapshot statistics are available."}
+			})
+			got := askPublic(t, app, QuestionRequest{Question: "Compare Jose Ramirez and junior caminero"})
+			if got.Kind != "answer" || plans != 2 || answers != 1 {
+				t.Fatalf("empty metadata bypass: %+v plans=%d answers=%d", got, plans, answers)
+			}
+		})
+	}
+}
+
+func TestQuestionRequiresBothPlayersWhenOnlyRestrictsMetricsOrSeasons(t *testing.T) {
+	for _, question := range []string{
+		"Compare Jose Ramirez and Junior Caminero, only for 2026",
+		"Compare only the home runs of Jose Ramirez and Junior Caminero in 2026",
+		"Compare only Jose Ramirez and Junior Caminero in 2026",
+	} {
+		t.Run(question, func(t *testing.T) {
+			plans, answers := 0, 0
+			_, app := playerLookupApp(t, func(kind, input string) any {
+				if kind == "query_plan" {
+					plans++
+					return QueryPlan{Status: "query", SQL: strings.Replace(strings.Replace(playerComparisonSQL, "IN (608070,691406)", "IN (691406)", 1), ",p.player_id FROM", " FROM", 1), Seasons: []int{2026}, LookupPlayerIDs: []int64{}}
+				}
+				answers++
+				return AnswerPresentation{Text: "Only Junior Caminero's statistics are available."}
+			})
+			got := askPublic(t, app, QuestionRequest{Question: question})
+			if got.Kind != "error" || plans != 2 || answers != 0 {
+				t.Fatalf("metric/season restriction bypassed player coverage: %+v plans=%d answers=%d", got, plans, answers)
+			}
+		})
+	}
+}
+
+func TestQuestionRetainsNamedPlayersInMetricRevision(t *testing.T) {
+	plans, answers := 0, 0
+	_, app := playerLookupApp(t, func(kind, input string) any {
+		if kind == "query_plan" {
+			plans++
+			if plans == 1 {
+				return QueryPlan{Status: "clarification", Message: "Compare both players by OPS in 2026?", Seasons: []int{2026}}
+			}
+			if !strings.Contains(input, "608070") || !strings.Contains(input, "691406") {
+				t.Error("metric revision lost the original named players")
+			}
+			return QueryPlan{Status: "query", SQL: playerComparisonSQL, Seasons: []int{2026}, LookupPlayerIDs: []int64{608070, 691406}}
+		}
+		answers++
+		return AnswerPresentation{Text: "In 2026, José Ramírez hit 12 HR and Junior Caminero hit 42 HR in the imported snapshot."}
+	})
+	question := "Compare Jose Ramirez and Junior Caminero in 2026"
+	pending := askPublic(t, app, QuestionRequest{Question: question})
+	if pending.Kind != "clarification" {
+		t.Fatalf("missing metric clarification: %+v", pending)
+	}
+	got := askPublic(t, app, QuestionRequest{Question: question, Confirmation: pending.Confirmation, Revision: "Use home runs in 2026"})
+	if got.Kind != "answer" || plans != 2 || answers != 1 {
+		t.Fatalf("metric revision lost players: %+v plans=%d answers=%d", got, plans, answers)
 	}
 }

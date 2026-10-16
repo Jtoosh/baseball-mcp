@@ -54,6 +54,7 @@ type QueryPlan struct {
 }
 type PlanInput struct {
 	SkipClarification                          bool
+	RequireComparisonCoverage                  bool
 	Question, Interpretation, Strategy, Schema string
 	Seasons                                    []int
 	PreviousSQL, DatabaseError                 string
@@ -142,9 +143,16 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 	if intent.Revision != "" {
 		identityQuestion = intent.Revision
 	}
-	players := q.DB.MatchedPlayers(identityQuestion)
+	players := q.DB.MatchedPlayers(identityQuestion, intent.PlayerID)
+	if intent.Revision != "" && len(q.DB.MatchedPlayers(identityQuestion, 0)) == 0 {
+		// A name-free metric, season or identity revision still concerns the
+		// original question's players, including a confirmed ambiguous identity.
+		identityQuestion = req.Question + "\n" + intent.Revision
+		players = q.DB.MatchedPlayers(identityQuestion, intent.PlayerID)
+	}
+	comparison := len(players) > 1 && directComparison.MatchString(identityQuestion) && !filteredComparison.MatchString(identityQuestion)
 	inputFor := func(strategy string) PlanInput {
-		return PlanInput{SkipClarification: skipClarification, Question: req.Question, Interpretation: intent.Interpretation, Strategy: strategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent, PlayerCandidates: players}
+		return PlanInput{SkipClarification: skipClarification, RequireComparisonCoverage: comparison, Question: req.Question, Interpretation: intent.Interpretation, Strategy: strategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent, PlayerCandidates: players}
 	}
 	// Resolve all strategy plans before executing any: either can identify an
 	// ambiguity, and an initial planning failure must not suppress the other.
