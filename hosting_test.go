@@ -133,35 +133,29 @@ func operationalFixture(t *testing.T) *OperationalStore {
 	t.Cleanup(func() { cleanupOperationalFixture(store); store.Close() })
 	return store
 }
-func TestInvitedUserConfirmsQuestionAcrossInstances(t *testing.T) {
+func TestInvitedUserAsksIndependentQuestionsAcrossInstances(t *testing.T) {
 	store := operationalFixture(t)
 	auth, sign, _ := hostedAuthFixture(t)
-	model := &scriptedModel{plan: QueryPlan{Status: "unsupported", Message: "This controlled question is outside the examples."}}
+	model := &correctionModel{plans: []QueryPlan{{Status: "query", SQL: correctionLookupSQL, Interpretation: "Use OPS in 2025", Seasons: []int{2025}}}}
 	svc1, _ := testApp(t, model)
 	svc2, _ := testApp(t, model)
-	svc1.State = store
-	svc2.State = store
-	options := HostedOptions{Mode: "preview", Auth: auth, State: store}
+	options := HostedOptions{Mode: "production", Auth: auth, State: store}
 	a, b := NewHostedHandler(svc1, options), NewHostedHandler(svc2, options)
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	w := hostedPost(a, token, `{"question":"What was Max Muncy's OPS in 2025?"}`)
-	var pending Outcome
-	json.Unmarshal(w.Body.Bytes(), &pending)
-	if pending.Kind != "clarification" || len(pending.Choices) != 2 {
-		t.Fatalf("clarification: %s", w.Body.String())
+	for _, app := range []http.Handler{a, b} {
+		w := hostedPost(app, token, `{"question":"What was Max Muncy's OPS in 2025?"}`)
+		var got Outcome
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Kind != "answer" || got.Confirmation != "" || len(got.Choices) != 0 {
+			t.Fatalf("direct answer across instances: %s", w.Body.String())
+		}
 	}
-	payload, _ := json.Marshal(QuestionRequest{Question: "What was Max Muncy's OPS in 2025?", Confirmation: pending.Confirmation, Choice: pending.Choices[0]})
-	altered := strings.Replace(string(payload), "2025", "2024", 1)
-	if w = hostedPost(b, token, altered); !strings.Contains(w.Body.String(), `"kind":"error"`) {
-		t.Fatalf("altered question accepted: %s", w.Body.String())
-	}
-	w = hostedPost(b, token, string(payload))
-	if strings.Contains(w.Body.String(), `"kind":"error"`) {
-		t.Fatalf("cross-instance confirmation: %s", w.Body.String())
-	}
-	w = hostedPost(a, token, string(payload))
-	if !strings.Contains(w.Body.String(), `"kind":"error"`) {
-		t.Fatalf("replay: %s", w.Body.String())
+	for _, input := range model.inputs {
+		if input.Interpretation != "" || input.ResolvedIntent.PlayerID != 0 || !input.SkipClarification {
+			t.Fatalf("new question inherited an interpretation: %+v", input)
+		}
 	}
 }
 
@@ -419,55 +413,48 @@ func (m waitingErrorModel) Answer(context.Context, AnswerInput) (AnswerPresentat
 	return AnswerPresentation{}, errors.New(m.text)
 }
 
-func TestConfirmationReusesAdmissionAndRejectsAnotherInvitedUser(t *testing.T) {
+func TestHostedRejectsObsoleteConfirmationBeforeAdmission(t *testing.T) {
 	store := operationalFixture(t)
 	auth, sign, _ := hostedAuthFixture(t)
 	svc, _ := testApp(t, PreviewModel{})
 	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	other := sign("user_second", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	w := hostedPost(app, token, `{"question":"What was Max Muncy's OPS in 2025?"}`)
-	var pending Outcome
-	json.Unmarshal(w.Body.Bytes(), &pending)
-	payload, _ := json.Marshal(QuestionRequest{Question: "What was Max Muncy's OPS in 2025?", Confirmation: pending.Confirmation, Choice: pending.Choices[0]})
-	w = hostedPost(app, other, string(payload))
-	if !strings.Contains(w.Body.String(), `"kind":"error"`) {
-		t.Fatalf("different owner accepted: %s", w.Body.String())
+	// Include a still-valid confirmation created by the previous release.
+	ctx := context.WithValue(context.Background(), hostedContextKey{}, &hostedIdentity{User: "user_invited", Admission: "previous-admission"})
+	confirmation, err := store.remember(ctx, "Who led MLB in OPS?", ResolvedIntent{Interpretation: "Use OPS"}, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	w = hostedPost(app, token, string(payload))
-	if strings.Contains(w.Body.String(), `"kind":"error"`) {
-		t.Fatalf("confirmation failed: %s", w.Body.String())
-	}
-	for i := 0; i < 19; i++ {
-		w = hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
-		if !strings.Contains(w.Body.String(), `"kind":"answer"`) {
-			t.Fatalf("confirmation double-counted at %d: %s", i, w.Body.String())
+	for _, req := range []QuestionRequest{
+		{Confirmation: confirmation}, {Interpretation: "Use OPS"}, {Revision: "Use home runs"}, {Choice: "Max Muncy"},
+	} {
+		req.Question = "Who led MLB in OPS?"
+		payload, _ := json.Marshal(req)
+		w := hostedPost(app, token, string(payload))
+		if !strings.Contains(w.Body.String(), `"kind":"error"`) || !strings.Contains(w.Body.String(), "complete question again") {
+			t.Fatalf("obsolete clarification accepted: %s", w.Body.String())
 		}
 	}
-	w = hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
+	for i := 0; i < 20; i++ {
+		w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
+		if !strings.Contains(w.Body.String(), `"kind":"answer"`) {
+			t.Fatalf("invalid request used admission at %d: %s", i, w.Body.String())
+		}
+	}
+	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
 	if !strings.Contains(w.Body.String(), "twenty questions") {
 		t.Fatalf("quota bypass: %s", w.Body.String())
 	}
 }
-func TestExpiredConfirmationAndUnavailableStateFailClosed(t *testing.T) {
+
+func TestUnavailableHostedStateFailsClosed(t *testing.T) {
 	store := operationalFixture(t)
-	now := time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
-	store.Now = func() time.Time { return now }
 	auth, sign, _ := hostedAuthFixture(t)
 	svc, _ := testApp(t, PreviewModel{})
 	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	w := hostedPost(app, token, `{"question":"What was Max Muncy's OPS in 2025?"}`)
-	var pending Outcome
-	json.Unmarshal(w.Body.Bytes(), &pending)
-	now = now.Add(15 * time.Minute)
-	payload, _ := json.Marshal(QuestionRequest{Question: "What was Max Muncy's OPS in 2025?", Confirmation: pending.Confirmation, Choice: pending.Choices[0]})
-	w = hostedPost(app, token, string(payload))
-	if !strings.Contains(w.Body.String(), "expired") {
-		t.Fatalf("expired confirmation accepted: %s", w.Body.String())
-	}
 	store.Close()
-	w = hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
+	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
 	if !strings.Contains(w.Body.String(), `"kind":"error"`) || strings.Contains(w.Body.String(), "table") {
 		t.Fatalf("state outage admitted: %s", w.Body.String())
 	}

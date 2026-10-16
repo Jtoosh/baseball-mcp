@@ -25,6 +25,9 @@ func (c Config) sqlInspectionEnabled() bool {
 }
 
 func (c Config) skipClarificationEnabled() bool {
+	if c.Environment == "production" || c.Environment == "preview" {
+		return true
+	}
 	return c.DeveloperSkipClarification && c.localLoopback()
 }
 

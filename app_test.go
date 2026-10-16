@@ -144,7 +144,7 @@ func TestBrowserPrivateArtifactsAreNotServed(t *testing.T) {
 	}
 	r := httptest.NewRecorder()
 	app.ServeHTTP(r, httptest.NewRequest("GET", "/", nil))
-	if r.Code != 200 || !strings.Contains(r.Body.String(), `id="show-table"`) {
+	if r.Code != 200 || !strings.Contains(r.Body.String(), `id="question-form"`) {
 		t.Fatal("browser not served")
 	}
 }

@@ -16,8 +16,8 @@ Working design decisions from the project interview. The browser-first applicati
 
 ## Question workflow
 
-- Questions are independent; retain context only for pending interpretation confirmation.
-- Ambiguous interpretations require confirmation before SQL execution. Explicit questions can execute immediately.
+- Questions are independent. Hosted questions use direct model interpretation, including vague metrics and same-name players; users clarify with a fresh, complete question.
+- Local evaluation retains ambiguity confirmation unless its developer direct-interpretation control is enabled. Controlled Preview uses fixed supported examples without confirmation.
 - Generate SQL using an LLM supplied with the database schema, run the permitted read query, and send its results to the LLM for a natural-language answer.
 - Validate generated SQL before execution: permit a single read query over the baseball data, including read-only CTEs; reject multiple statements, writes, and database-administration queries. Validation failures can use the single correction attempt.
 - Allow one SQL correction attempt after a failure, then return a natural-language error.
@@ -30,11 +30,11 @@ Working design decisions from the project interview. The browser-first applicati
 
 ## Presentation
 
-- Present a natural-language answer and a table formatted for a general audience, with a switch to hide the table.
+- Render the model's natural-language answer as safe Markdown, including any tables the model writes. Do not append a separate supporting-results table or display a table switch.
 - Never expose generated SQL or database schema details in browser output, including errors and comparison results.
 - Save error messages in a developer log unavailable to end users.
-- Comparison mode runs both prompting strategies automatically and presents separately labelled answers and optional tables.
-- If one strategy fails, retain the other strategy's successful answer and optional table. The failed strategy presents only a natural-language error.
+- Comparison mode runs both prompting strategies automatically and presents separately labelled Markdown answers.
+- If one strategy fails, retain the other strategy's successful Markdown answer. The failed strategy presents only a natural-language error.
 
 ## Configuration and composition
 
@@ -58,7 +58,7 @@ Controlled regression tests use independently checked reference answers from the
 
 ## Verified dataset
 
-The corrected export, `advanced-mlb-24-26.csv`, has unique player-season keys and stable numeric player IDs, but two distinct players share the name Max Muncy. Use IDs for identity and request clarification for ambiguous names. See `data-profile.md` for the inspected fields, coverage, and reference results.
+The corrected export, `advanced-mlb-24-26.csv`, has unique player-season keys and stable numeric player IDs, but two distinct players share the name Max Muncy. Use IDs for identity. Hosted questions let the model interpret ambiguous names directly; local evaluation retains its configured clarification behavior. See `data-profile.md` for the inspected fields, coverage, and reference results.
 
 The corrected CSV includes the traditional batting statistics needed for all initial examples, including singles and exported OPS. Import all available metrics, preserving their exported values. Source filter settings and retrieval dates should be recorded when available; the CSV itself does not contain them.
 
@@ -67,7 +67,7 @@ MCP protocol details and hosted deployment operations are deferred to their late
 ## Hosted extension
 
 - Serve baseball.jamesteuscher.click on Vercel Hobby, with dashboard-managed Clerk invitations and email OTP. Validate access on the server for each question.
-- Keep the immutable read-only SQLite batting snapshot; use free Neon PostgreSQL for shared confirmations, question admissions, leases and spending reservations.
+- Keep the immutable read-only SQLite batting snapshot; use free Neon PostgreSQL for question admissions, leases and spending reservations; existing confirmation tables remain for schema compatibility.
 - Allow twenty questions per user per rolling hour and one active question per user. Bound each hosted request to two minutes, retaining the existing ten-second SQL ceiling.
 - Reserve every production model call against a $10 UTC-calendar-month allowance before contacting the provider. Unknown pricing or uncertain accounting fails closed; there is no budget override.
 - Use protected, visibly labelled controlled previews with isolated state and no production model credentials. Successful main builds deploy automatically only after tests pass.

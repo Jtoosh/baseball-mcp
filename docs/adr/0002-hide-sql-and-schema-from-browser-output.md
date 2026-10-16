@@ -1,3 +1,3 @@
 # Keep SQL and database schema out of browser output
 
-The browser presents natural-language answers and an optional result table formatted for a general audience. Generated SQL is never displayed to users, and the table exposes meaningful baseball labels rather than database schema details. This deliberately gives up an in-browser SQL debugging view to preserve the intended user experience; prompting comparisons must follow the same presentation rule.
+The browser presents natural-language answers formatted in Markdown, including any tables written by the model. The October 2026 presentation revision removes the separate supporting-results table and its checkbox because they duplicate the answer and confuse users. Generated SQL and database schema details remain private in the general-audience interface; prompting comparisons follow the same presentation rule, with SQL inspection available only through the explicit local developer control.

@@ -87,7 +87,7 @@ func TestLocalEvaluationUnexpectedClarificationReportsRetryAndPreservesOtherAnsw
 	}
 }
 
-func TestLocalEvaluationProviderChoosesInterpretationWithoutClarification(t *testing.T) {
+func TestProviderChoosesInterpretationWithoutClarification(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -99,12 +99,12 @@ func TestLocalEvaluationProviderChoosesInterpretationWithoutClarification(t *tes
 		if format["name"] == "query_plan" {
 			instructions := payload["instructions"].(string)
 			if !strings.Contains(instructions, "Choose an interpretation independently") || strings.Contains(instructions, "return status clarification") {
-				t.Error("local prompt still requests clarification")
+				t.Error("direct interpretation prompt still requests clarification")
 			}
 			schema := format["schema"].(map[string]any)["properties"].(map[string]any)["status"].(map[string]any)
 			for _, status := range schema["enum"].([]any) {
 				if status == "clarification" {
-					t.Error("local contract permits clarification")
+					t.Error("direct interpretation contract permits clarification")
 				}
 			}
 			reply = QueryPlan{Status: "query", SQL: correctionLookupSQL, Interpretation: "Use OPS in 2025", Seasons: []int{2025}}
@@ -115,12 +115,17 @@ func TestLocalEvaluationProviderChoosesInterpretationWithoutClarification(t *tes
 	}))
 	defer provider.Close()
 	model := &OpenAIModel{Client: openai.NewClient(option.WithAPIKey("test-only"), option.WithBaseURL(provider.URL+"/"), option.WithMaxRetries(0)), ModelName: "test-model"}
-	service, app := testApp(t, model)
-	service.Config.DeveloperSkipClarification = true
-	service.Config.Listen = "127.0.0.1:8080"
-	got := askPublic(t, app, QuestionRequest{Question: "Who is the best hitter?"})
-	if got.Kind != "answer" {
-		t.Fatalf("direct interpretation failed: %+v", got)
+	for _, mode := range []string{"local", "preview", "production"} {
+		t.Run(mode, func(t *testing.T) {
+			service, app := testApp(t, model)
+			service.Config.Environment = mode
+			service.Config.DeveloperSkipClarification = mode == "local"
+			service.Config.Listen = "127.0.0.1:8080"
+			got := askPublic(t, app, QuestionRequest{Question: "Who is the best hitter?"})
+			if got.Kind != "answer" {
+				t.Fatalf("direct interpretation failed: %+v", got)
+			}
+		})
 	}
 }
 
@@ -130,8 +135,8 @@ func TestLocalEvaluationBypassRequiresOptInAndLoopback(t *testing.T) {
 		{"default off", `{"model":"test-model"}`, "clarification"},
 		{"local enabled", `{"model":"test-model","developer_skip_clarification":true}`, "answer"},
 		{"network listener", `{"model":"test-model","developer_skip_clarification":true,"listen":"0.0.0.0:8080"}`, "clarification"},
-		{"preview", `{"model":"test-model","developer_skip_clarification":true,"environment":"preview"}`, "clarification"},
-		{"production", `{"model":"test-model","developer_skip_clarification":true,"environment":"production"}`, "clarification"},
+		{"preview", `{"model":"test-model","environment":"preview"}`, "answer"},
+		{"production", `{"model":"test-model","environment":"production"}`, "answer"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := t.TempDir() + "/config.json"
@@ -191,13 +196,12 @@ func TestLocalEvaluationCorrectedClarificationReturnsRetryError(t *testing.T) {
 	}
 }
 
-func TestHostedQuestionsKeepClarificationWhenLocalBypassConfigured(t *testing.T) {
+func TestHostedQuestionsInterpretAmbiguityDirectly(t *testing.T) {
 	auth, sign, _ := hostedAuthFixture(t)
 	for _, mode := range []string{"preview", "production"} {
 		t.Run(mode, func(t *testing.T) {
-			service, _ := testApp(t, &scriptedModel{plan: QueryPlan{Status: "clarification", Message: "Use OPS among qualifying hitters?", Seasons: []int{2025}}})
-			service.Config.DeveloperSkipClarification = true
-			service.Config.Listen = "127.0.0.1:8080"
+			model := &correctionModel{plans: []QueryPlan{{Status: "query", SQL: correctionLookupSQL, Interpretation: "Use OPS in 2025", Seasons: []int{2025}}}}
+			service, _ := testApp(t, model)
 			app := NewHostedHandler(service, HostedOptions{Mode: mode, Auth: auth, State: operationalFixture(t)})
 			token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 			for _, question := range []string{"Who was the best hitter?", "What was Max Muncy's OPS in 2025?"} {
@@ -207,8 +211,13 @@ func TestHostedQuestionsKeepClarificationWhenLocalBypassConfigured(t *testing.T)
 				if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
 					t.Fatal(err)
 				}
-				if response.Code != 200 || got.Kind != "clarification" || got.Confirmation == "" {
-					t.Fatalf("hosted clarification lost: %+v", got)
+				if response.Code != 200 || got.Kind != "answer" || got.Confirmation != "" || len(got.Choices) != 0 || len(got.SQLInspection) != 0 {
+					t.Fatalf("hosted direct answer failed: %+v", got)
+				}
+			}
+			for _, input := range model.inputs {
+				if !input.SkipClarification {
+					t.Fatal("hosted model still permits clarification")
 				}
 			}
 		})
