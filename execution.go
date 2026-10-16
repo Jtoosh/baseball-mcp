@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
+
+	"github.com/jtoosh/baseball-mcp/internal/data"
 )
 
 // Each strategy owns its query attempts and presentation, so a failed strategy
 // cannot discard another strategy's answer when comparison is enabled.
 func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest, input PlanInput, plan QueryPlan) (StrategyOutcome, []int) {
+	lookupIDs := slices.Clone(plan.LookupPlayerIDs)
+	slices.Sort(lookupIDs)
 	for attempt := 0; attempt < 2; attempt++ {
 		if plan.Status == "clarification" && input.SkipClarification {
 			return StrategyOutcome{Strategy: input.Strategy, Kind: "error", Message: localClarificationError}, nil
@@ -22,14 +28,28 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 		if input.ResolvedIntent != nil && !sameSeasons(input.ResolvedIntent.Seasons, plan.Seasons) {
 			return q.strategyFailure(input.Strategy, "validate corrected season", errors.New("strategy changed the resolved seasons")), nil
 		}
+		correctedIDs := slices.Clone(plan.LookupPlayerIDs)
+		slices.Sort(correctedIDs)
+		if !slices.Equal(lookupIDs, correctedIDs) {
+			return q.strategyFailure(input.Strategy, "validate corrected players", errors.New("strategy changed the resolved player identities")), nil
+		}
 		executionCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		result, err := q.DB.Query(executionCtx, plan.SQL)
 		cancel()
 		stage := "execute query"
 		var table *PresentationTable
+		var missing []data.MissingPlayerSeason
 		if err == nil {
 			stage = "validate result measures"
 			err = applyComputedMeasures(&result, plan.Columns)
+		}
+		if err == nil {
+			stage = "validate player-season coverage"
+			if len(lookupIDs) > 0 && input.ResolvedIntent != nil && input.ResolvedIntent.PlayerID != 0 && !slices.Contains(lookupIDs, input.ResolvedIntent.PlayerID) {
+				err = errors.New("player-season coverage: lookup changed the confirmed player")
+			} else {
+				missing, err = data.VerifyPlayerCoverage(input.PlayerCandidates, lookupIDs, plan.Seasons, result)
+			}
 		}
 		if err == nil {
 			stage = "format result"
@@ -51,9 +71,12 @@ func (q *QueryService) executeStrategy(ctx context.Context, req QuestionRequest,
 			}
 			continue
 		}
-		answer, err := q.Model.Answer(ctx, AnswerInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: input.Strategy, Seasons: plan.Seasons, Result: result})
+		answer, err := q.Model.Answer(ctx, AnswerInput{Question: req.Question, Interpretation: req.Interpretation, Strategy: input.Strategy, Seasons: plan.Seasons, Result: result, MissingPlayerSeasons: missing})
 		if err != nil {
 			return q.strategyFailure(input.Strategy, "summarize result", err), plan.Seasons
+		}
+		for _, gap := range missing {
+			answer.Text += fmt.Sprintf("\n\nThe imported snapshot has no player-season record for %s in %d.", gap.Player, gap.Year)
 		}
 		if !q.safePublicText(answer.Text) {
 			return q.strategyFailure(input.Strategy, "validate answer", errors.New("answer contained private details")), plan.Seasons

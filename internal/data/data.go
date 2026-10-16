@@ -221,6 +221,7 @@ type Database struct {
 	Seasons   []int
 	Timeout   time.Duration
 	playerIDs map[string]struct{}
+	players   []catalogPlayer
 }
 type Result struct {
 	Columns   []string
@@ -254,19 +255,32 @@ func Open(path string) (*Database, error) {
 	if len(seasons) == 0 {
 		return nil, errors.New("empty database")
 	}
-	identities, _, err := c.Prepare("SELECT player_id FROM players")
+	identities, _, err := c.Prepare("SELECT p.player_id,p.name,s.year,s.player_age,s.pa FROM players p JOIN stats s ON s.player_id=p.player_id ORDER BY p.player_id,s.year DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer identities.Close()
 	playerIDs := map[string]struct{}{}
+	var players []catalogPlayer
 	for identities.Step() {
-		playerIDs[strconv.FormatInt(identities.ColumnInt64(0), 10)] = struct{}{}
+		id, name := identities.ColumnInt64(0), identities.ColumnText(1)
+		playerIDs[strconv.FormatInt(id, 10)] = struct{}{}
+		season := PlayerSeasonDescription{Year: identities.ColumnInt(2), Age: identities.ColumnInt(3), PlateAppearances: identities.ColumnInt(4)}
+		if len(players) == 0 || players[len(players)-1].candidate.ID != id {
+			parts := strings.SplitN(name, ", ", 2)
+			display := name
+			if len(parts) == 2 {
+				display = parts[1] + " " + parts[0]
+			}
+			players = append(players, catalogPlayer{key: normalizePlayerText(display), candidate: PlayerCandidate{ID: id, Name: name, Description: fmt.Sprintf("%s — age %d in %d, %d plate appearances", display, season.Age, season.Year, season.PlateAppearances)}})
+		}
+		last := &players[len(players)-1].candidate
+		last.Seasons = append(last.Seasons, season)
 	}
 	if err := identities.Err(); err != nil {
 		return nil, err
 	}
-	return &Database{path: abs, Seasons: seasons, Timeout: 10 * time.Second, playerIDs: playerIDs}, nil
+	return &Database{path: abs, Seasons: seasons, Timeout: 10 * time.Second, playerIDs: playerIDs, players: players}, nil
 }
 func (d *Database) Close() error { return nil }
 func (d *Database) Query(ctx context.Context, sql string) (Result, error) {

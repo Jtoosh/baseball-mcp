@@ -44,12 +44,13 @@ type PresentationTable struct {
 	Rows    [][]string `json:"rows"`
 }
 type QueryPlan struct {
-	Interpretation string   `json:"interpretation"`
-	Status         string   `json:"status"`
-	SQL            string   `json:"sql"`
-	Message        string   `json:"message"`
-	Seasons        []int    `json:"seasons"`
-	Columns        []string `json:"columns"`
+	LookupPlayerIDs []int64  `json:"lookup_player_ids"`
+	Interpretation  string   `json:"interpretation"`
+	Status          string   `json:"status"`
+	SQL             string   `json:"sql"`
+	Message         string   `json:"message"`
+	Seasons         []int    `json:"seasons"`
+	Columns         []string `json:"columns"`
 }
 type PlanInput struct {
 	SkipClarification                          bool
@@ -63,6 +64,7 @@ type AnswerInput struct {
 	Question, Interpretation, Strategy string
 	Seasons                            []int
 	Result                             QueryResult
+	MissingPlayerSeasons               []data.MissingPlayerSeason
 }
 type AnswerPresentation struct {
 	Text string `json:"text"`
@@ -136,8 +138,13 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 		failure  *StrategyOutcome
 	}
 	candidates := make([]candidate, 0, len(strategies))
+	identityQuestion := req.Question
+	if intent.Revision != "" {
+		identityQuestion = intent.Revision
+	}
+	players := q.DB.MatchedPlayers(identityQuestion)
 	inputFor := func(strategy string) PlanInput {
-		return PlanInput{SkipClarification: skipClarification, Question: req.Question, Interpretation: intent.Interpretation, Strategy: strategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent}
+		return PlanInput{SkipClarification: skipClarification, Question: req.Question, Interpretation: intent.Interpretation, Strategy: strategy, Schema: data.Schema(), Seasons: q.DB.Seasons, ResolvedIntent: &intent, PlayerCandidates: players}
 	}
 	// Resolve all strategy plans before executing any: either can identify an
 	// ambiguity, and an initial planning failure must not suppress the other.

@@ -34,6 +34,8 @@ It includes players with at least ten plate appearances and combines each
 player's performance across teams. Updates are manual; this is a fixed snapshot.
 
 - Questions without a season default to **2026**, the latest imported season.
+- Full player names may omit accents or use different capitalization. Direct
+  comparisons check that all requested available player-seasons were retrieved.
 - Rankings use players with **at least 502 PA**; direct lookups include others.
 - Rankings use **dense rank**: ties share a rank, and the next distinct value gets
   the next rank. Top-ten lists include all players tied at rank ten.
@@ -60,6 +62,7 @@ planned as a later extension.
 Further reading:
 
 - [Design and prompting strategies](docs/design.md)
+- [Player name matching](docs/player-name-matching.md)
 - [Hosted setup and operation](docs/hosting/setup.md)
 - [Managing invited access](docs/hosting/access.md)
 

@@ -85,6 +85,13 @@ func (m *OpenAIModel) Plan(ctx context.Context, input PlanInput) (QueryPlan, err
 		meanings = append(meanings, metric.Name)
 	}
 	prompt := fmt.Sprintf("Question: %s\nResolved interpretation: %s\nAvailable seasons: %v\nSchema:\n%s\nMetric meanings:\n%s", input.Question, input.Interpretation, input.Seasons, input.Schema, strings.Join(labels, "\n"))
+	if len(input.PlayerCandidates) > 0 {
+		catalog, err := json.Marshal(input.PlayerCandidates)
+		if err != nil {
+			return plan, err
+		}
+		prompt += "\nMatched player catalog (private; canonical source names, identities, available seasons):\n" + string(catalog)
+	}
 	if input.ResolvedIntent != nil {
 		prompt += fmt.Sprintf("\nConfirmed player identity (private): %d\nUser revision: %s", input.ResolvedIntent.PlayerID, input.ResolvedIntent.Revision)
 	}
@@ -106,7 +113,9 @@ func (m *OpenAIModel) Plan(ctx context.Context, input PlanInput) (QueryPlan, err
 		prompt += "\nPrivate correction context:\n" + string(correction)
 		instructions += ` Correct the failed query using the private diagnostic context. Keep the same resolved baseball question and seasons. Return one permitted read query. Never repeat SQL or diagnostic details in natural-language text.`
 	}
-	err := m.structured(ctx, "query_plan", instructions, prompt, objectSchema(map[string]any{"interpretation": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": statuses}, "sql": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"}, "seasons": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "columns": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": meanings}}}), &plan)
+	instructions += ` Matched player catalog entries are server-resolved full names, matched regardless of accents or case. Use their private IDs to filter player lookups and comparisons, never guessed name spellings. Preserve distinct identities when names coincide; use the question and season/age context to choose, honoring any confirmed identity. Do not combine same-name players' statistics. Never disclose catalog IDs or private context in explanations.`
+	instructions += ` For a direct lookup or comparison of named players, return lookup_player_ids containing every requested catalog identity (choose one per ambiguous name), and select stored name, year and pa columns. Include all requested players and seasons even when a player-season is unavailable; the server checks coverage. For rankings, intentional filtered subsets, aggregates, unsupported questions and clarifications return an empty lookup_player_ids array. On correction preserve these lookup identities. Never populate it with IDs absent from the supplied catalog.`
+	err := m.structured(ctx, "query_plan", instructions, prompt, objectSchema(map[string]any{"lookup_player_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "interpretation": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": statuses}, "sql": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"}, "seasons": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "columns": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": meanings}}}), &plan)
 
 	return plan, err
 }
@@ -115,7 +124,8 @@ func (m *OpenAIModel) Plan(ctx context.Context, input PlanInput) (QueryPlan, err
 const workedQueryExamples = `
 Worked question/SQL examples:
 Question: Show Shohei Ohtani's walks in 2024.
-SQL: SELECT p.name,s.year,s.walk,s.pa FROM players p JOIN stats s ON p.player_id=s.player_id WHERE p.name='Ohtani, Shohei' AND s.year=2024
+Matched catalog identity (private): Ohtani, Shohei = 660271
+SQL: SELECT p.name,s.year,s.walk,s.pa FROM players p JOIN stats s ON p.player_id=s.player_id WHERE p.player_id=660271 AND s.year=2024
 Question: Show hitters with at least 25 doubles in 2025.
 SQL: SELECT p.name,s.year,s.double,s.pa FROM players p JOIN stats s ON p.player_id=s.player_id WHERE s.year=2025 AND s.double>=25 ORDER BY s.double DESC,p.name
 End of worked examples. Answer the actual Question at the start of the input, applying its resolved interpretation and all domain rules.
@@ -127,10 +137,10 @@ func (m *OpenAIModel) Answer(ctx context.Context, input AnswerInput) (AnswerPres
 	if err != nil {
 		return answer, err
 	}
-	payload, err := json.Marshal(map[string]any{"question": input.Question, "interpretation": input.Interpretation, "seasons": input.Seasons, "table": table, "partial": input.Result.Truncated})
+	payload, err := json.Marshal(map[string]any{"question": input.Question, "interpretation": input.Interpretation, "seasons": input.Seasons, "table": table, "partial": input.Result.Truncated, "missing_player_seasons": input.MissingPlayerSeasons})
 	if err != nil {
 		return answer, err
 	}
-	err = m.structured(ctx, "answer", domainInstructions+`Write a concise answer based only on the supplied result table, question and season context. Include plate appearances for nonranking player lookups. Empty results are a normal no-matches outcome. When partial is true, the table contains only the first 500 matching rows: explicitly limit every claim to that returned portion, identify the answer as partial, and ask the user to narrow the question. Do not infer totals or coverage beyond the supplied portion. Do not invent values. Mention that results reflect imported snapshots.`, string(payload), objectSchema(map[string]any{"text": map[string]any{"type": "string"}}), &answer)
+	err = m.structured(ctx, "answer", domainInstructions+`Write a concise answer based only on the supplied result table, question and season context. Include plate appearances for nonranking player lookups. Empty results are a normal no-matches outcome. Only missing_player_seasons establishes that a named player lacks a record for a particular season; do not infer that a player is absent from the dataset from a missing table row. The server appends these verified season gaps, so summarize the returned statistics without repeating them. When partial is true, the table contains only the first 500 matching rows: explicitly limit every claim to that returned portion, identify the answer as partial, and ask the user to narrow the question. Do not infer totals or coverage beyond the supplied portion. Do not invent values. Mention that results reflect imported snapshots.`, string(payload), objectSchema(map[string]any{"text": map[string]any{"type": "string"}}), &answer)
 	return answer, err
 }

@@ -30,10 +30,14 @@ func (m *scriptedModel) Answer(_ context.Context, in AnswerInput) (AnswerPresent
 	m.answerInput = in
 	return AnswerPresentation{Text: "Luis Vázquez's OPS in 2025 was .448 over 53 plate appearances."}, m.answerErr
 }
-func testApp(t *testing.T, m Model) (*QueryService, httpHandler) {
+func testApp(t *testing.T, m Model, source ...string) (*QueryService, httpHandler) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "mlb.db")
-	if err := ImportCSV("advanced-mlb-24-26.csv", path); err != nil {
+	csv := "advanced-mlb-24-26.csv"
+	if len(source) > 0 {
+		csv = source[0]
+	}
+	if err := ImportCSV(csv, path); err != nil {
 		t.Fatal(err)
 	}
 	db, err := OpenDatabase(path)
