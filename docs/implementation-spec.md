@@ -1,5 +1,7 @@
 ## Problem Statement
 
+**October 2026 revision:** The browser now displays only the model's Markdown answer, including any model-written tables; the separate supporting-results table and checkbox below are superseded. Hosted Production and controlled Preview answer without ambiguity confirmation, including same-name players. Users clarify by asking a fresh, complete question. The original confirmation requirements below remain relevant only to local evaluation when its direct-interpretation control is disabled.
+
 People exploring MLB batting statistics should be able to ask questions in ordinary language without knowing SQL, the database schema, or how to join player records to season statistics. They need answers grounded in the supplied season snapshots, meaningful ranking and qualification rules, and a clear explanation when a question is ambiguous, unsupported, incomplete, or unsuccessful.
 
 The project also needs a reproducible way to compare prompting strategies and inspect their queries privately for a class assignment, while keeping database implementation details out of the general-audience browser interface.

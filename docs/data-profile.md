@@ -12,7 +12,7 @@ SHA-256: `60de4620c5e90e112a1c1142cd1504af42e46ece8ba816a1d21ea530a6b318ca`.
 | 2025 | 632 | 145 |
 | 2026 | 630 | 135 |
 
-There are 1,879 rows and 857 distinct player IDs. No `(player_id, year)` pair is duplicated, and each ID has a consistent name. `Muncy, Max` belongs to two distinct players, IDs `571970` and `691777`; names cannot serve as identity or silently disambiguate a lookup.
+There are 1,879 rows and 857 distinct player IDs. No `(player_id, year)` pair is duplicated, and each ID has a consistent name. `Muncy, Max` belongs to two distinct players, IDs `571970` and `691777`; names cannot serve as unique identity. Hosted questions let the model interpret same-name lookups directly; local evaluation retains its configured clarification behavior.
 
 The minimum plate-appearance count is 10 in each season. Answers concern records present in this dataset, which is not every MLB player-season. Season labels come from the CSV; retrieval dates and source filtering settings are not encoded in it.
 

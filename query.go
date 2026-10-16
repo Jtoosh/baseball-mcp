@@ -105,6 +105,9 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 		return Outcome{Kind: "error", Message: "Please enter a baseball statistics question of at most 4,000 characters."}
 	}
 	if _, hosted := ctx.Value(hostedContextKey{}).(*hostedIdentity); hosted {
+		if skipClarification && (req.Confirmation != "" || req.Interpretation != "" || req.Revision != "" || req.Choice != "") {
+			return Outcome{Kind: "error", Message: "Questions are answered directly now. Please ask your complete question again."}
+		}
 		if req.Interpretation != "" || len(req.Revision) > 4000 || (req.Confirmation == "" && (req.Revision != "" || req.Choice != "")) {
 			return Outcome{Kind: "error", Message: "Please confirm the proposed interpretation or revise it using its confirmation."}
 		}

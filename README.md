@@ -2,7 +2,7 @@
 
 Ask baseball questions in plain English and get answers backed by MLB batting
 statistics. The app supports player lookups, season leaders, top-ten overlaps,
-and advanced metrics, with an optional table of supporting results.
+and advanced metrics, with answers formatted in Markdown.
 
 ## Use the hosted app
 
@@ -10,8 +10,10 @@ Open [baseball.jamesteuscher.click](https://baseball.jamesteuscher.click).
 Access is invitation-only: ask the site owner for an invitation and approval,
 then sign in with the verification code sent to your email.
 
-Ask a question, confirm the interpretation if prompted, and read the answer.
-Use **Show supporting results** to reveal the result table.
+Ask a question and read the answer, including any tables in the model's response.
+The hosted app lets the model interpret vague questions and same-name players
+directly. To clarify your intent, ask a new, more specific question; each question
+is independent.
 
 Try these questions:
 

@@ -1,7 +1,6 @@
 'use strict';
 const form = document.querySelector('#question-form');
 const results = document.querySelector('#results');
-const toggle = document.querySelector('#show-table');
 const statusText = document.querySelector('#status-text');
 const loadingBall = document.querySelector('#loading-ball');
 const requestError = document.querySelector('#request-error');
@@ -53,32 +52,6 @@ function message(text, kind) {
   });
   container.append(fragment);
   return container;
-}
-toggle.addEventListener('change', () => {
-  document.querySelectorAll('table[data-supporting-results]').forEach(table => { table.hidden = !toggle.checked; });
-});
-function supportingTable(data) {
-  const table = element('table');
-  table.dataset.supportingResults = '';
-  table.hidden = !toggle.checked;
-  const header = element('thead');
-  const headingRow = element('tr');
-  for (const label of data.columns) {
-    const cell = element('th', label);
-    cell.scope = 'col';
-    headingRow.append(cell);
-  }
-  header.append(headingRow);
-  const body = element('tbody');
-  for (const values of data.rows) {
-    const row = element('tr');
-    for (const value of values) row.append(element('td', value));
-    body.append(row);
-  }
-  table.append(header, body);
-  const wrapper = element('div', undefined, 'table-wrap');
-  wrapper.append(table);
-  return wrapper;
 }
 function sqlPanel(inspection) {
   const panel = element('details', undefined, 'sql-panel');
@@ -138,7 +111,6 @@ function responseContent(data, question) {
     panel.append(message(outcome.message, outcome.kind));
     const seasons = outcome.seasons || data.seasons;
     if (seasons?.length) panel.append(element('p', 'Season snapshots: ' + seasons.join(', ')));
-    if (outcome.kind === 'answer' && outcome.table) panel.append(supportingTable(outcome.table));
     const inspection = data.sql_inspection?.find(item => item.strategy === outcome.strategy);
     if (inspection) panel.append(sqlPanel(inspection));
     content.append(panel);
