@@ -23,8 +23,6 @@ type Config struct {
 	Listen                     string          `json:"listen"`
 	DeveloperLog               string          `json:"developer_log"`
 	Environment                string          `json:"environment,omitempty"`
-	ClerkIssuer                string          `json:"clerk_issuer,omitempty"`
-	ClerkPublicKey             string          `json:"clerk_publishable_key,omitempty"`
 	PublicOrigin               string          `json:"public_origin,omitempty"`
 	HourlyQuestionLimit        int             `json:"hourly_question_limit,omitempty"`
 	ipLimitKey                 string

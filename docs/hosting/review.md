@@ -1,5 +1,7 @@
 # Hosting implementation verification
 
+Historical review of the invitation-based release. Public-access spec #25 and ADRs 0005/0006 supersede its sign-in, account-removal and spending checks; current instructions are in [setup.md](setup.md).
+
 Reviewed the implementation since `c022f9f`, the approved hosting specification and ticket breakdown. Two independent read-only reviewers checked Standards and Spec as required by the implement/code-review skills.
 
 ## Standards

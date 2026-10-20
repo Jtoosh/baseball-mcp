@@ -18,7 +18,7 @@ Further reading:
 - [Design and prompting strategies](docs/design.md)
 - [Player name matching](docs/player-name-matching.md)
 - [Hosted setup and operation](docs/hosting/setup.md)
-- [Managing invited access](docs/hosting/access.md)
+- [Public website access](docs/hosting/access.md)
 
 ## How I built it
 
@@ -35,8 +35,8 @@ I primarily used T3 Code and Superset as my agent control planes for this projec
 ## Use the hosted app
 
 Open [baseball.jamesteuscher.click](https://baseball.jamesteuscher.click).
-Access is invitation-only to protect from API key abuse. Ask the site owner for an invitation and approval,
-then sign in with the verification code sent to your email.
+Anyone can ask a question immediately, without an account, email, invitation or sign-in.
+Use the website to submit questions; direct API access is not supported.
 
 Ask a question and read the answer, including any tables in the model's response.
 The hosted app lets the model interpret vague questions and same-name players
@@ -50,8 +50,8 @@ Try these questions:
 - “Which qualifying players share tenth place by dense rank for home runs in 2024?”
 - “Is any qualifying player in the top ten for HR, 1B, and 2B in 2026?”
 
-Hosted access allows 20 new questions per user per rolling hour and one active
-request at a time. Questions use the owner's prepaid provider balance, with no application spending ceiling.
+Hosted access allows 20 new questions per network IP per rolling hour and one active
+request per IP at a time. People sharing Wi-Fi share this allowance. Questions use the owner's prepaid provider balance, with no application spending ceiling.
 
 ## More info
 

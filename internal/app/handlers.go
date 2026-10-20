@@ -32,6 +32,9 @@ func NewHandler(service *QueryService) http.Handler {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		body, _ := browserFiles.ReadFile("static/index.html")
+		if service.Config.Environment == "preview" {
+			body = bytes.Replace(body, []byte(`id="preview-notice" hidden`), []byte(`id="preview-notice"`), 1)
+		}
 		if service.Config.QuestionsPaused {
 			body = bytes.Replace(body, []byte(`id="pause-notice" role="status" hidden`), []byte(`id="pause-notice" role="status"`), 1)
 		}
@@ -74,11 +77,7 @@ func NewHandler(service *QueryService) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
-		policy := "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
-		if service.Config.Environment == "production" || service.Config.Environment == "preview" {
-			issuer := service.Config.ClerkIssuer
-			policy = "default-src 'self'; script-src 'self' " + issuer + " https://challenges.cloudflare.com https://*.protect.clerk.com; style-src 'self' 'unsafe-inline'; connect-src 'self' " + issuer + " https://*.protect.clerk.com:*; img-src 'self' https://img.clerk.com data:; worker-src 'self' blob:; frame-src " + issuer + " https://challenges.cloudflare.com https://*.protect.clerk.com; form-action 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
-		}
+		policy := "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; form-action 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 		w.Header().Set("Content-Security-Policy", policy)
 		mux.ServeHTTP(w, r)
 	})

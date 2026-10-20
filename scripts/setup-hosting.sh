@@ -184,7 +184,7 @@ finish() {
 # Replace the example below. Set TOTAL_STAGES to match the stages you write.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=6
+TOTAL_STAGES=4
 umask 077
 mkdir -p .private
 ENV_FILE=.private/hosting-owner.env
@@ -203,36 +203,9 @@ put_vercel() {
   fi
   say "Configured $name for $target."
 }
-clerk_stage() {
-  local target="$1" prefix="$2"
-  open_url "https://dashboard.clerk.com/"
-  step "Select the ${target} instance. Use the free Hobby plan and restricted/invitation-only signup."
-  step "Enable email verification codes; disable passwords, phone/social sign-in and email links."
-  step "For production, set baseball.jamesteuscher.click as the application domain and apply Clerk's exact DNS verification records."
-  step "API keys: copy the publishable and secret keys. Only the secret entry is hidden."
-  ask "${prefix}_CLERK_PUBLISHABLE_KEY" "Publishable key:"
-  ask_secret "${prefix}_CLERK_SECRET_KEY" "Secret key (hidden):"
-  ask "${prefix}_CLERK_ISSUER" "Frontend API origin, https://... without a trailing slash:"
-  local public_name="${prefix}_CLERK_PUBLISHABLE_KEY" secret_name="${prefix}_CLERK_SECRET_KEY" issuer_name="${prefix}_CLERK_ISSUER"
-  write_env "$public_name" "${!public_name}"
-  write_env "$secret_name" "${!secret_name}"
-  write_env "$issuer_name" "${!issuer_name}"
-  put_vercel CLERK_PUBLISHABLE_KEY "${!public_name}" "$target" config
-  put_vercel CLERK_SECRET_KEY "${!secret_name}" "$target" secret
-  put_vercel CLERK_ISSUER "${!issuer_name}" "$target" config
-  step 'Invite approved users. After acceptance, set their PRIVATE metadata to {"baseball_access": true} in the Users dashboard.'
-  step "Removing that flag or deleting the user removes question access on the next request."
-  pause "Confirm invite-only email-code settings and dashboard approval are configured, then press Enter."
-}
-
 banner "Baseball hosted account setup"
 say "Secrets are saved only to an ignored private file and provider secret settings. Do not paste them into chat."
 
-stage "Clerk development instance for controlled previews"
-clerk_stage preview PREVIEW
-
-stage "Clerk production instance for invited users"
-clerk_stage production PRODUCTION
 put_vercel PUBLIC_ORIGIN https://baseball.jamesteuscher.click production config
 
 stage "Separate free Neon operational databases"
@@ -285,7 +258,7 @@ stage "Custom subdomain DNS and verification"
 open_url "https://www.spaceship.com/"
 step "Open jamesteuscher.click DNS records. Preserve the apex and unrelated records."
 step "Recheck the current project recommendation: npx vercel domains verify baseball.jamesteuscher.click --scope jtooshs-projects"
-step "The current recommendation is CNAME name baseball → ae774825b448a93a.vercel-dns-017.com. Apply only the subdomain and Clerk verification records."
+step "The current recommendation is CNAME name baseball → ae774825b448a93a.vercel-dns-017.com. Apply only the baseball subdomain record."
 confirm "Have you applied the exact current DNS records and completed the owner setup?" || exit 1
 npx --yes vercel@63.1.2 domains verify baseball.jamesteuscher.click --scope jtooshs-projects
 note "Next: follow docs/hosting/setup.md to smoke-test protected previews, then enable main deployments."

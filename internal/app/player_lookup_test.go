@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -326,7 +325,7 @@ func TestQuestionChecksEveryRequestedPlayerSeason(t *testing.T) {
 
 func TestHostedQuestionResolvesUnaccentedComparison(t *testing.T) {
 	store := operationalFixture(t)
-	auth, sign, _ := hostedAuthFixture(t)
+
 	service, _ := playerLookupApp(t, func(kind, input string) any {
 		if kind == "query_plan" {
 			if !strings.Contains(input, "608070") || !strings.Contains(input, "691406") {
@@ -343,9 +342,9 @@ func TestHostedQuestionResolvesUnaccentedComparison(t *testing.T) {
 		}
 		return AnswerPresentation{Text: "In the 2026 snapshot, José Ramírez had 12 HR over 544 PA, and Junior Caminero had 42 HR over 702 PA."}
 	})
-	app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
-	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	response := hostedPost(app, token, `{"question":"Compare Jose Ramirez and junior caminero"}`)
+	app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", PublicOrigin: "https://baseball.example", State: store})
+
+	response := hostedPost(app, `{"question":"Compare Jose Ramirez and junior caminero"}`)
 	var got Outcome
 	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)

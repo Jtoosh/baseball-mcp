@@ -67,9 +67,9 @@ MCP protocol details and hosted deployment operations are deferred to their late
 
 ## Hosted extension
 
-- Serve baseball.jamesteuscher.click on Vercel Hobby, with dashboard-managed Clerk invitations and email OTP. Validate access on the server for each question.
+- Serve baseball.jamesteuscher.click on Vercel Hobby, with ongoing anonymous website access and a best-effort same-origin submission boundary (ADR 0006).
 - Keep the immutable read-only SQLite batting snapshot; use free Neon PostgreSQL for question admissions and leases; existing confirmation and accounting tables remain inert for schema compatibility.
-- Allow twenty questions per user per rolling hour and one active question per user. Bound each hosted request to two minutes, retaining the existing ten-second SQL ceiling.
+- Allow twenty questions per network IP per rolling hour and one active question per IP. Bound each hosted request to two minutes, retaining the existing ten-second SQL ceiling.
 - Rely on prepaid provider balance, with no application monetary ceiling or pricing-expiry gate (ADR 0005 supersedes ADR 0004). Preserve independent model bounds and fail closed on unavailable shared admission state.
 - Use protected, visibly labelled controlled previews with isolated state and no production model credentials. Successful main builds deploy automatically only after tests pass.
 - Retain safe private error diagnostics and necessary operational state; disable hosted evaluation histories. Owner account provisioning and secret entry use secure mechanisms outside chat.

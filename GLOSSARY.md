@@ -43,8 +43,8 @@ A fixed collection of batting statistics for a past regular season, rather than 
 **Latest available season**:
 The most recent season represented in the dataset. A question that omits a season defaults to this season, which is disclosed in the answer.
 
-**Invited user**:
-A person granted access by the site owner through an email invitation. An invitation does not grant access after the owner removes the user.
+**Visitor**:
+A person using the public baseball question website, without an account, invitation or sign-in.
 
 **Question admission**:
 Acceptance of one independent question for processing. Clarifying or revising its pending interpretation remains part of that question.

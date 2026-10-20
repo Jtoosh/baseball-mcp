@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/base64"
 	"net/url"
 	"strings"
 	"testing"
@@ -25,9 +24,9 @@ func TestHostedStartupAcceptsManagedNeonURL(t *testing.T) {
 	t.Setenv("VERCEL", "1")
 	t.Setenv("VERCEL_ENV", "preview")
 	t.Setenv("VERCEL_URL", "baseball-preview.example")
-	t.Setenv("CLERK_ISSUER", "https://fixture.accounts.dev")
-	t.Setenv("CLERK_PUBLISHABLE_KEY", "pk_test_"+base64.RawStdEncoding.EncodeToString([]byte("fixture.accounts.dev$")))
-	t.Setenv("CLERK_SECRET_KEY", "sk_test_fixture")
+	t.Setenv("CLERK_ISSUER", "")
+	t.Setenv("CLERK_PUBLISHABLE_KEY", "")
+	t.Setenv("CLERK_SECRET_KEY", "")
 	t.Setenv("IP_LIMIT_KEY", fixtureIPLimitKey)
 	t.Setenv("HOURLY_QUESTION_LIMIT", "3")
 	t.Setenv("DATABASE_URL", "postgresql://fixture:fixture@database.example/baseball?sslmode=require&channel_binding=require")
@@ -129,6 +128,44 @@ func TestQuestionPauseConfigurationIsValidatedAndDefaultsToAvailable(t *testing.
 			}
 			if err == nil && c.QuestionsPaused != setting.paused {
 				t.Fatalf("pause environment: %+v", c)
+			}
+		})
+	}
+}
+
+func TestAnonymousHostedStartupRequiresOperationalConfiguration(t *testing.T) {
+	for _, platform := range []string{"preview", "production"} {
+		t.Run(platform, func(t *testing.T) {
+			t.Setenv("VERCEL", "1")
+			t.Setenv("VERCEL_ENV", platform)
+			t.Setenv("VERCEL_URL", "")
+			t.Setenv("PUBLIC_ORIGIN", "https://baseball.example")
+			t.Setenv("IP_LIMIT_KEY", fixtureIPLimitKey)
+			t.Setenv("DATABASE_URL", "postgres://fixture@database.example/baseball?sslmode=require")
+			// No authentication settings are required in either environment.
+			t.Setenv("CLERK_ISSUER", "")
+			t.Setenv("CLERK_PUBLISHABLE_KEY", "")
+			t.Setenv("CLERK_SECRET_KEY", "")
+			t.Setenv("HOURLY_QUESTION_LIMIT", "20")
+			c, err := hostedConfig(Config{})
+			if err != nil || c.Environment != platform || c.PublicOrigin != "https://baseball.example" {
+				t.Fatalf("anonymous hosted startup: %+v %v", c, err)
+			}
+			for _, bad := range []struct{ key, value string }{
+				{"PUBLIC_ORIGIN", ""}, {"PUBLIC_ORIGIN", "https://baseball.example/"},
+				{"PUBLIC_ORIGIN", "http://baseball.example"}, {"IP_LIMIT_KEY", ""},
+				{"DATABASE_URL", ""}, {"HOURLY_QUESTION_LIMIT", "0"},
+			} {
+				t.Run(bad.key+bad.value, func(t *testing.T) {
+					t.Setenv(bad.key, bad.value)
+					if got, err := hostedConfig(Config{}); err == nil || got.Environment == "local" {
+						t.Fatalf("hosted configuration did not fail closed: %+v %v", got, err)
+					}
+				})
+			}
+			t.Setenv("VERCEL_ENV", "")
+			if _, err := hostedConfig(Config{}); err == nil {
+				t.Fatal("missing platform environment selected local mode")
 			}
 		})
 	}

@@ -7,9 +7,6 @@ const requestError = document.querySelector('#request-error');
 const previousLabel = document.querySelector('#previous-label');
 let busy = false;
 let displayedKind = '';
-let authRequired = false;
-let authReady = false;
-let accountGeneration = 0;
 
 const markdown = new marked.Marked({
   gfm: true,
@@ -139,17 +136,13 @@ async function ask(request) {
   results.setAttribute('aria-busy', 'true');
   requestError.hidden = true;
   document.querySelectorAll('button').forEach(button => { button.disabled = true; });
-  const generation = accountGeneration;
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (authRequired) {
-      const token = authReady ? await window.Clerk.session?.getToken() : null;
-      if (!token) throw new Error('Sign-in required');
-      headers.Authorization = 'Bearer ' + token;
-    }
-    const response = await fetch('/api/questions', { method: 'POST', headers, body: JSON.stringify(request) });
+    const response = await fetch('/api/questions', {
+      method: 'POST', mode: 'same-origin', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Baseball-Website': '1' },
+      body: JSON.stringify(request)
+    });
     const data = await response.json();
-    if (generation !== accountGeneration) return;
     if (!data || !['answer', 'clarification', 'unsupported', 'error'].includes(data.kind)) throw new Error('Invalid response');
     if (!response.ok && data.kind !== 'error') throw new Error('Request failed');
     if (response.status === 429) {
@@ -168,7 +161,6 @@ async function ask(request) {
       requestError.replaceChildren();
     }
   } catch {
-    if (generation !== accountGeneration) return;
     showFailure({ kind: 'error', message: "I couldn't load the new response. Please try again." }, request.question);
   } finally {
     busy = false;
@@ -183,52 +175,15 @@ form.addEventListener('submit', event => {
   ask({ question: document.querySelector('#question').value.trim() });
 });
 
-async function initializeAccount() {
+async function initializeWebsite() {
   try {
-    const response = await fetch('/api/client-config');
+    const response = await fetch('/api/client-config', { mode: 'same-origin' });
     if (!response.ok) throw new Error('Configuration unavailable');
     const config = await response.json();
-    if (config.mode === 'local') return;
-    authRequired = true;
-    document.querySelector('#account').hidden = false;
-    form.hidden = true;
     document.querySelector('#preview-notice').hidden = config.mode !== 'preview';
-    const issuer = new URL(config.issuer);
-    if (issuer.protocol !== 'https:' || !config.publishable_key?.startsWith('pk_')) throw new Error('Invalid sign-in configuration');
-    const ui = document.createElement('script');
-    ui.src = issuer.origin + '/npm/@clerk/ui@1/dist/ui.browser.js';
-    ui.crossOrigin = 'anonymous';
-    await new Promise((resolve, reject) => { ui.onload = resolve; ui.onerror = reject; document.head.append(ui); });
-    const script = document.createElement('script');
-    script.src = issuer.origin + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
-    script.dataset.clerkPublishableKey = config.publishable_key;
-    await new Promise((resolve, reject) => { script.onload = resolve; script.onerror = reject; document.head.append(script); });
-    await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
-    authReady = true;
-    let activeIdentity;
-    const update = ({ user, session }) => {
-      const identity = user ? user.id + ':' + (session?.id || '') : null;
-      if (identity === activeIdentity) return;
-      activeIdentity = identity;
-      accountGeneration++;
-      results.replaceChildren();
-      requestError.replaceChildren();
-      requestError.hidden = true;
-      previousLabel.hidden = true;
-      displayedKind = '';
-      form.hidden = !user;
-      document.querySelector('#sign-out').hidden = !user;
-      document.querySelector('#sign-in').hidden = !!user;
-      document.querySelector('#account-status').textContent = user ? 'Signed in' : 'Sign in with an invited email address.';
-      if (!user) window.Clerk.mountSignIn(document.querySelector('#sign-in'), { routing: 'hash', signInForceRedirectUrl: location.origin + '/' });
-    };
-    window.Clerk.addListener(update);
-    document.querySelector('#sign-out').addEventListener('click', () => window.Clerk.signOut());
+    document.querySelector('#pause-notice').hidden = !config.questions_paused;
   } catch {
-    authRequired = true;
-    form.hidden = true;
-    document.querySelector('#account').hidden = false;
-    document.querySelector('#account-status').textContent = 'Sign-in is temporarily unavailable. Please reload later.';
+    statusText.textContent = 'Website configuration is temporarily unavailable. Please reload later.';
   }
 }
-initializeAccount();
+initializeWebsite();

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -11,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -68,43 +66,21 @@ func hostedConfig(c Config) (Config, error) {
 	if c.HourlyQuestionLimit < 1 {
 		return c, errors.New("hourly_question_limit must be a positive integer")
 	}
-	c.ClerkIssuer = os.Getenv("CLERK_ISSUER")
-	c.ClerkPublicKey = os.Getenv("CLERK_PUBLISHABLE_KEY")
 	c.PublicOrigin = os.Getenv("PUBLIC_ORIGIN")
 	if c.Environment == "preview" {
 		if host := os.Getenv("VERCEL_URL"); host != "" {
 			c.PublicOrigin = "https://" + host
 		}
 	}
-	for _, value := range []string{c.ClerkIssuer, c.PublicOrigin} {
-		u, err := url.Parse(value)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-			return c, errors.New("configure HTTPS authentication issuer and public origin")
-		}
+	u, err := url.Parse(c.PublicOrigin)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return c, errors.New("configure an exact HTTPS public origin")
 	}
-	prefix := "pk_test_"
-	if c.Environment == "production" {
-		prefix = "pk_live_"
-	}
-	if !strings.HasPrefix(c.ClerkPublicKey, prefix) {
-		return c, errors.New("authentication key does not match environment")
-	}
-	raw, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(strings.TrimPrefix(c.ClerkPublicKey, prefix), "="))
-	if err != nil || strings.TrimSuffix(string(raw), "$") != strings.TrimPrefix(c.ClerkIssuer, "https://") {
-		return c, errors.New("authentication key and issuer disagree")
-	}
-	secret := os.Getenv("CLERK_SECRET_KEY")
-	expected := "sk_test_"
-	if c.Environment == "production" {
-		expected = "sk_live_"
-	}
+
 	var connectionErr error
 	c.operationalDSN, connectionErr = verifiedOperationalDSN(os.Getenv("DATABASE_URL"))
 	if connectionErr != nil {
 		return c, connectionErr
-	}
-	if !strings.HasPrefix(secret, expected) || os.Getenv("DATABASE_URL") == "" {
-		return c, errors.New("hosted authentication and state credentials required")
 	}
 	return c, nil
 }
@@ -156,6 +132,5 @@ func startHosted(c Config) (http.Handler, func(), error) {
 	}
 	service := NewQueryService(db, model, c, logger)
 	service.State = state
-	auth := NewClerkAuth(os.Getenv("CLERK_SECRET_KEY"), c.ClerkIssuer, c.PublicOrigin, nil)
-	return NewHostedHandler(service, HostedOptions{IPLimitKey: c.ipLimitKey, Mode: c.Environment, Auth: auth, PublishableKey: c.ClerkPublicKey, State: state}), func() { state.Close(); cleanup() }, nil
+	return NewHostedHandler(service, HostedOptions{IPLimitKey: c.ipLimitKey, Mode: c.Environment, PublicOrigin: c.PublicOrigin, State: state}), func() { state.Close(); cleanup() }, nil
 }
