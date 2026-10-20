@@ -19,6 +19,7 @@ const hostedOutputTokens int64 = 2048
 type OpenAIModel struct {
 	Client    openai.Client
 	ModelName string
+	hosted    bool
 }
 
 func NewOpenAIModel(model string) *OpenAIModel {
@@ -27,7 +28,11 @@ func NewOpenAIModel(model string) *OpenAIModel {
 func (m *OpenAIModel) structured(ctx context.Context, name, instructions, input string, schema map[string]any, target any) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	params := responses.ResponseNewParams{MaxOutputTokens: openai.Int(hostedOutputTokens), ServiceTier: responses.ResponseNewParamsServiceTierDefault, Model: m.ModelName, Input: responses.ResponseNewParamsInputUnion{OfString: openai.String(input)}, Instructions: openai.String(instructions), Store: openai.Bool(false), Text: responses.ResponseTextConfigParam{Format: responses.ResponseFormatTextConfigUnionParam{OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{Name: name, Schema: schema, Strict: openai.Bool(true)}}}}
+	params := responses.ResponseNewParams{Model: m.ModelName, Input: responses.ResponseNewParamsInputUnion{OfString: openai.String(input)}, Instructions: openai.String(instructions), Store: openai.Bool(false), Text: responses.ResponseTextConfigParam{Format: responses.ResponseFormatTextConfigUnionParam{OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{Name: name, Schema: schema, Strict: openai.Bool(true)}}}}
+	if m.hosted {
+		params.MaxOutputTokens = openai.Int(hostedOutputTokens)
+		params.ServiceTier = responses.ResponseNewParamsServiceTierDefault
+	}
 	response, err := m.Client.Responses.New(ctx, params)
 	if err != nil {
 		var provider *openai.Error

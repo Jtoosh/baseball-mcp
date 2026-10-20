@@ -127,6 +127,7 @@ func startHosted(c Config) (http.Handler, func(), error) {
 			return nil, nil, errors.New("production model credential required")
 		}
 		live := NewOpenAIModel(c.Model)
+		live.hosted = true
 		live.Client = openai.NewClient(option.WithAPIKey(os.Getenv("OPENAI_API_KEY")), option.WithBaseURL("https://api.openai.com/v1/"), option.WithMaxRetries(0))
 		model = live
 	}

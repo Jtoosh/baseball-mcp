@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestQuestionsKeepIndependentProviderBoundsWithoutSpendingGuard(t *testing.T) {
+func TestLocalQuestionsPreserveProviderDefaultsWithoutSpendingGuard(t *testing.T) {
 	var calls int
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -21,8 +22,14 @@ func TestQuestionsKeepIndependentProviderBoundsWithoutSpendingGuard(t *testing.T
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Error(err)
 		}
-		if payload["max_output_tokens"] != float64(2048) || payload["service_tier"] != "default" || payload["store"] != false || payload["model"] != "configured-model" {
-			t.Errorf("provider bounds: output=%v tier=%v store=%v model=%v", payload["max_output_tokens"], payload["service_tier"], payload["store"], payload["model"])
+		if _, present := payload["max_output_tokens"]; present {
+			t.Errorf("local question unexpectedly caps provider output: %v", payload["max_output_tokens"])
+		}
+		if _, present := payload["service_tier"]; present {
+			t.Errorf("local question unexpectedly selects provider tier: %v", payload["service_tier"])
+		}
+		if payload["store"] != false || payload["model"] != "configured-model" {
+			t.Errorf("provider settings: store=%v model=%v", payload["store"], payload["model"])
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"id":"fixture","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"status\":\"unsupported\",\"message\":\"Only batting questions are supported.\",\"sql\":\"\",\"seasons\":[],\"columns\":[],\"interpretation\":\"\",\"lookup_player_ids\":[]}"}]}]}`)
@@ -79,9 +86,9 @@ func TestProviderQuotaFailureIsTemporarySafeAndNeverRetried(t *testing.T) {
 	}
 }
 
-func TestComparisonCorrectionsAndAnswersKeepProviderBounds(t *testing.T) {
+func TestHostedComparisonCorrectionsAndAnswersKeepProviderBounds(t *testing.T) {
 	var plans, corrections, answers int
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	provider := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
 			Model           string `json:"model"`
 			Input           string `json:"input"`
@@ -115,13 +122,9 @@ func TestComparisonCorrectionsAndAnswersKeepProviderBounds(t *testing.T) {
 		raw, _ := json.Marshal(result)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"id": "fixture", "status": "completed", "output": []any{map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": string(raw)}}}}})
-	}))
-	defer provider.Close()
-	t.Setenv("OPENAI_BASE_URL", provider.URL+"/")
-	t.Setenv("OPENAI_API_KEY", "test-only")
-	svc, handler := testApp(t, NewOpenAIModel("configured-model"))
-	svc.Config.ComparisonMode = true
-	w := postQuestion(handler)
+	})
+	handler := capturedProductionApp(t, provider, true)
+	w := hostedPost(handler, `{"question":"What was Luis Vázquez's OPS in 2025?"}`)
 	var outcome Outcome
 	if err := json.Unmarshal(w.Body.Bytes(), &outcome); err != nil {
 		t.Fatal(err)
@@ -140,4 +143,45 @@ func TestLegacyPricingConfigurationDoesNotBlockStartup(t *testing.T) {
 	if err != nil || config.Model != "configured-model" {
 		t.Fatalf("retired pricing configuration blocked startup: %v", err)
 	}
+}
+
+// Capture the SDK transport after the real hosted composition, including its
+// pinned provider origin. No request is forwarded to a paid provider.
+type capturedProviderTransport struct{ handler http.Handler }
+
+func (c capturedProviderTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.URL.Scheme != "https" || r.URL.Host != "api.openai.com" || r.URL.Path != "/v1/responses" {
+		return nil, fmt.Errorf("unexpected provider endpoint: %s", r.URL)
+	}
+	w := httptest.NewRecorder()
+	c.handler.ServeHTTP(w, r)
+	return w.Result(), nil
+}
+
+func capturedProductionApp(t *testing.T, provider http.Handler, comparison bool) http.Handler {
+	t.Helper()
+	// Use the real PostgreSQL fixture prerequisite, then clean the production
+	// namespace used by startup as well as its independent fixture namespace.
+	operationalFixture(t)
+	state, err := OpenOperationalStore(context.Background(), os.Getenv("TEST_DATABASE_URL"), "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cleanupOperationalFixture(state); state.Close() })
+	original := http.DefaultTransport
+	http.DefaultTransport = capturedProviderTransport{provider}
+	t.Cleanup(func() { http.DefaultTransport = original })
+	t.Setenv("OPENAI_API_KEY", "test-only")
+	// Startup must pin its provider endpoint even if local overrides are set.
+	t.Setenv("OPENAI_BASE_URL", "https://must-not-be-used.example/")
+	handler, cleanup, err := startHosted(Config{
+		Environment: "production", Model: "configured-model", DefaultStrategy: StrategySchema,
+		ComparisonMode: comparison, PublicOrigin: "https://baseball.example",
+		ipLimitKey: fixtureIPLimitKey, operationalDSN: os.Getenv("TEST_DATABASE_URL"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	return handler
 }

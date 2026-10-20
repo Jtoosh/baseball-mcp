@@ -16,7 +16,7 @@ type admissionFailure struct {
 func (e *admissionFailure) Error() string   { return e.message }
 func retrySeconds(until, now time.Time) int { return max(1, int(math.Ceil(until.Sub(now).Seconds()))) }
 
-func (s *OperationalStore) admit(ctx context.Context, req QuestionRequest, limit int) (func(), error) {
+func (s *OperationalStore) admit(ctx context.Context, limit int) (func(), error) {
 	identity, ok := ctx.Value(hostedContextKey{}).(*hostedIdentity)
 	if !ok || identity.LimiterKey == "" {
 		return nil, errors.New("missing network identity")
