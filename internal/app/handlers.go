@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 )
 
 //go:embed static/index.html static/app.js static/app.css static/vendor/*.js
@@ -53,7 +54,14 @@ func NewHandler(service *QueryService) http.Handler {
 			json.NewEncoder(w).Encode(Outcome{Kind: "error", Message: "Please send a single question."})
 			return
 		}
-		json.NewEncoder(w).Encode(service.Ask(r.Context(), req))
+		out := service.Ask(r.Context(), req)
+		if out.RetryAfter > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(out.RetryAfter))
+		}
+		if out.HTTPStatus != 0 {
+			w.WriteHeader(out.HTTPStatus)
+		}
+		json.NewEncoder(w).Encode(out)
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

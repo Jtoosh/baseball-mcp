@@ -58,7 +58,7 @@ func (s *OperationalStore) migrate(ctx context.Context) error {
 		return err
 	}
 	_, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS baseball_state_version (version integer PRIMARY KEY);
- INSERT INTO baseball_state_version(version) VALUES(1) ON CONFLICT DO NOTHING;
+ INSERT INTO baseball_state_version(version) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM baseball_state_version);
  CREATE TABLE IF NOT EXISTS baseball_confirmations(namespace text NOT NULL,token text NOT NULL,user_id text NOT NULL,question text NOT NULL,admission text NOT NULL,payload jsonb NOT NULL,expires timestamptz NOT NULL,PRIMARY KEY(namespace,token));
  CREATE INDEX IF NOT EXISTS baseball_confirmations_expiry ON baseball_confirmations(namespace,expires);
  CREATE TABLE IF NOT EXISTS baseball_users(namespace text NOT NULL,user_id text NOT NULL,lease text NOT NULL,expires timestamptz NOT NULL,PRIMARY KEY(namespace,user_id));
@@ -73,8 +73,19 @@ func (s *OperationalStore) migrate(ctx context.Context) error {
 	if err = tx.QueryRow(ctx, `SELECT COUNT(*),MAX(version) FROM baseball_state_version`).Scan(&count, &version); err != nil {
 		return err
 	}
-	if count != 1 || version != 1 {
+	if count != 1 || (version != 1 && version != 2) {
 		return errors.New("unsupported operational migration version")
+	}
+	if version == 1 {
+		_, err = tx.Exec(ctx, `CREATE TABLE baseball_ip_leases(namespace text NOT NULL,limiter_key text NOT NULL,lease text NOT NULL,expires timestamptz NOT NULL,PRIMARY KEY(namespace,limiter_key));
+ CREATE INDEX baseball_ip_leases_expiry ON baseball_ip_leases(namespace,expires);
+ CREATE TABLE baseball_ip_admissions(namespace text NOT NULL,id text NOT NULL,limiter_key text NOT NULL,created timestamptz NOT NULL,PRIMARY KEY(namespace,id));
+ CREATE INDEX baseball_ip_admissions_network ON baseball_ip_admissions(namespace,limiter_key,created);
+ CREATE INDEX baseball_ip_admissions_expiry ON baseball_ip_admissions(namespace,created);
+ UPDATE baseball_state_version SET version=2 WHERE version=1;`)
+		if err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }

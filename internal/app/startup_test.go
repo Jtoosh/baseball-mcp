@@ -27,10 +27,15 @@ func TestHostedStartupAcceptsManagedNeonURL(t *testing.T) {
 	t.Setenv("CLERK_ISSUER", "https://fixture.accounts.dev")
 	t.Setenv("CLERK_PUBLISHABLE_KEY", "pk_test_"+base64.RawStdEncoding.EncodeToString([]byte("fixture.accounts.dev$")))
 	t.Setenv("CLERK_SECRET_KEY", "sk_test_fixture")
+	t.Setenv("IP_LIMIT_KEY", fixtureIPLimitKey)
+	t.Setenv("HOURLY_QUESTION_LIMIT", "3")
 	t.Setenv("DATABASE_URL", "postgresql://fixture:fixture@database.example/baseball?sslmode=require&channel_binding=require")
 	c, err := hostedConfig(Config{})
 	if err != nil {
 		t.Fatalf("managed Neon URL prevented hosted startup: %v", err)
+	}
+	if c.HourlyQuestionLimit != 3 || c.ipLimitKey != fixtureIPLimitKey {
+		t.Fatal("hosted admission configuration missing")
 	}
 	assertVerifiedOperationalTLS(t, c.operationalDSN)
 }
@@ -72,5 +77,17 @@ func TestHostedOperationalTLSNormalization(t *testing.T) {
 		if _, err := verifiedOperationalDSN(raw); err == nil {
 			t.Fatal("invalid or explicitly insecure configuration was accepted")
 		}
+	}
+}
+
+func TestHostedAllowanceConfigurationRejectsNonpositiveValues(t *testing.T) {
+	for _, amount := range []string{"0", "-1"} {
+		t.Run(amount, func(t *testing.T) {
+			path := t.TempDir() + "/config.json"
+			writeInspectionConfig(t, path, `{"model":"fixture","hourly_question_limit":`+amount+`}`)
+			if _, err := LoadConfig(path); err == nil {
+				t.Fatal("nonpositive configured allowance accepted")
+			}
+		})
 	}
 }

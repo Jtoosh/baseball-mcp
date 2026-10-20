@@ -78,6 +78,7 @@ func hostedAuthFixture(t *testing.T) (*ClerkAuth, func(string, string, time.Time
 func hostedPost(app httpHandler, token string, payload string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest("POST", "/api/questions", strings.NewReader(payload))
 	r.Header.Set("Origin", "https://baseball.example")
+	r.Header.Set("X-Vercel-Forwarded-For", "192.0.2.10")
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -88,7 +89,7 @@ func hostedPost(app httpHandler, token string, payload string) *httptest.Respons
 func TestHostedQuestionsRequireCurrentInvitedSession(t *testing.T) {
 	auth, sign, removed := hostedAuthFixture(t)
 	svc, _ := testApp(t, &scriptedModel{plan: QueryPlan{Status: "unsupported", Message: "Only batting questions are supported."}})
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: operationalFixture(t)})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: operationalFixture(t)})
 	payload := `{"question":"Who pitched best?"}`
 	for _, token := range []string{"", sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(-time.Minute)), sign("user_invited", "https://clerk.other.accounts.dev", time.Now().Add(time.Hour)), sign("user_stranger", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))} {
 		w := hostedPost(app, token, payload)
@@ -139,7 +140,7 @@ func TestInvitedUserAsksIndependentQuestionsAcrossInstances(t *testing.T) {
 	model := &correctionModel{plans: []QueryPlan{{Status: "query", SQL: correctionLookupSQL, Interpretation: "Use OPS in 2025", Seasons: []int{2025}}}}
 	svc1, _ := testApp(t, model)
 	svc2, _ := testApp(t, model)
-	options := HostedOptions{Mode: "production", Auth: auth, State: store}
+	options := HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store}
 	a, b := NewHostedHandler(svc1, options), NewHostedHandler(svc2, options)
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	for _, app := range []http.Handler{a, b} {
@@ -167,7 +168,7 @@ func TestHostedSnapshotAndControlledPreviewPreserveReferenceAnswer(t *testing.T)
 	t.Cleanup(cleanup)
 	svc := NewQueryService(db, PreviewModel{}, Config{Model: "controlled", DefaultStrategy: StrategySchema}, nil)
 	auth, sign, _ := hostedAuthFixture(t)
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: operationalFixture(t)})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: operationalFixture(t)})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
 	for _, want := range []string{`"kind":"answer"`, "Yordan Alvarez", "1.035", "691", "Controlled preview"} {
@@ -197,7 +198,7 @@ func TestProductionMonthlyAllowanceKeepsUncertainSpendingUntilUTCReset(t *testin
 	svc, _ := testApp(t, model)
 	svc.State = store
 	auth, sign, _ := hostedAuthFixture(t)
-	app := NewHostedHandler(svc, HostedOptions{Mode: "production", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	payload := `{"question":"Who pitched best?"}`
 	if w := hostedPost(app, token, payload); !strings.Contains(w.Body.String(), `"kind":"unsupported"`) {
@@ -226,7 +227,7 @@ func TestInvitedQuestionsRespectRollingHourlyAdmission(t *testing.T) {
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	svc, _ := testApp(t, PreviewModel{})
 	svc.State = store
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
 	for i := 0; i < 20; i++ {
 		w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
 		if !strings.Contains(w.Body.String(), `"kind":"answer"`) {
@@ -234,7 +235,7 @@ func TestInvitedQuestionsRespectRollingHourlyAdmission(t *testing.T) {
 		}
 	}
 	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
-	if !strings.Contains(w.Body.String(), "twenty questions") || strings.Contains(w.Body.String(), "table") {
+	if w.Code != 429 || w.Header().Get("Retry-After") != "3600" || !strings.Contains(w.Body.String(), "20 questions") || strings.Contains(w.Body.String(), "table") {
 		t.Fatalf("rate bypass: %s", w.Body.String())
 	}
 	now = now.Add(time.Hour)
@@ -265,11 +266,17 @@ func TestInvitedUserHasOnlyOneActiveQuestionAcrossInstances(t *testing.T) {
 	store := operationalFixture(t)
 	auth, sign, _ := hostedAuthFixture(t)
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
+	secondToken := sign("user_second", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	started, finish := make(chan struct{}), make(chan struct{})
 	svc1, _ := testApp(t, waitingProviderModel{started, finish})
 	svc2, _ := testApp(t, PreviewModel{})
-	a := NewHostedHandler(svc1, HostedOptions{Mode: "preview", Auth: auth, State: store})
-	b := NewHostedHandler(svc2, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	a := NewHostedHandler(svc1, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
+	secondStore, err := OpenOperationalStore(context.Background(), os.Getenv("TEST_DATABASE_URL"), store.namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondStore.Close()
+	b := NewHostedHandler(svc2, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: secondStore})
 	done := make(chan *httptest.ResponseRecorder, 1)
 	go func() { done <- hostedPost(a, token, `{"question":"Who led MLB in OPS?"}`) }()
 	select {
@@ -277,9 +284,13 @@ func TestInvitedUserHasOnlyOneActiveQuestionAcrossInstances(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("question did not start")
 	}
-	w := hostedPost(b, token, `{"question":"Who led MLB in OPS?"}`)
-	if !strings.Contains(w.Body.String(), "already have a question") {
+	w := hostedPost(b, secondToken, `{"question":"Who led MLB in OPS?"}`)
+	if w.Code != 429 || w.Header().Get("Retry-After") == "" || !strings.Contains(w.Body.String(), "already has a question") {
 		t.Fatalf("concurrent admission: %s", w.Body.String())
+	}
+	independent := hostedIPPost(b, secondToken, "192.0.2.11", "")
+	if !strings.Contains(independent.Body.String(), `"kind":"answer"`) {
+		t.Fatalf("independent network blocked: %d %s", independent.Code, independent.Body.String())
 	}
 	close(finish)
 	<-done
@@ -293,11 +304,12 @@ func TestHostedWholeRequestHonorsParentDeadline(t *testing.T) {
 	auth, sign, _ := hostedAuthFixture(t)
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	svc, _ := testApp(t, waitingProviderModel{make(chan struct{}), make(chan struct{})})
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	req := httptest.NewRequest("POST", "/api/questions", strings.NewReader(`{"question":"Who led MLB in OPS?"}`)).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Vercel-Forwarded-For", "192.0.2.10")
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
 	if !strings.Contains(w.Body.String(), "took too long") || strings.Contains(w.Body.String(), "table") {
@@ -309,7 +321,7 @@ func TestControlledPreviewNeverUsesProductionKeyAndRejectsUnlistedQuestions(t *t
 	t.Setenv("OPENAI_API_KEY", "production-key-must-not-be-used")
 	auth, sign, _ := hostedAuthFixture(t)
 	svc, _ := testApp(t, PreviewModel{})
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: operationalFixture(t)})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: operationalFixture(t)})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	for _, q := range []string{"Who led MLB in OPS in 2070?", "Who led MLB in OPS among pitchers?"} {
 		payload, _ := json.Marshal(QuestionRequest{Question: q})
@@ -344,8 +356,8 @@ func TestConcurrentInvitedUsersCannotOverbookMonthlyAllowance(t *testing.T) {
 	svc1, _ := testApp(t, model())
 	svc2, _ := testApp(t, model())
 	auth, sign, _ := hostedAuthFixture(t)
-	a := NewHostedHandler(svc1, HostedOptions{Mode: "production", Auth: auth, State: store})
-	b := NewHostedHandler(svc2, HostedOptions{Mode: "production", Auth: auth, State: store})
+	a := NewHostedHandler(svc1, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
+	b := NewHostedHandler(svc2, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
 	token1 := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	token2 := sign("user_second", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	done := make(chan *httptest.ResponseRecorder, 1)
@@ -356,7 +368,7 @@ func TestConcurrentInvitedUsersCannotOverbookMonthlyAllowance(t *testing.T) {
 		close(finish)
 		t.Fatal("provider did not start")
 	}
-	w := hostedPost(b, token2, `{"question":"Who led MLB in OPS?"}`)
+	w := hostedIPPost(b, token2, "192.0.2.11", "")
 	close(finish)
 	<-done
 	if calls.Load() != 1 || !strings.Contains(w.Body.String(), "monthly question allowance") {
@@ -376,7 +388,7 @@ func TestTrustworthyUsagePermitsFurtherQuestionsWithoutRefundingMissingUsage(t *
 	model := &OpenAIModel{Client: openai.NewClient(option.WithAPIKey("test-only"), option.WithBaseURL(provider.URL+"/"), option.WithMaxRetries(0)), ModelName: "gpt-6.1-sol", Budget: &SpendingGuard{State: store}}
 	svc, _ := testApp(t, model)
 	auth, sign, _ := hostedAuthFixture(t)
-	app := NewHostedHandler(svc, HostedOptions{Mode: "production", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	for i := 0; i < 3; i++ {
 		w := hostedPost(app, token, `{"question":"Who pitched best?"}`)
@@ -396,7 +408,7 @@ func TestHostedDiagnosticsOmitProviderSecretsAndSQL(t *testing.T) {
 	svc, _ := testApp(t, waitingErrorModel{secret})
 	var logs bytes.Buffer
 	svc.Logger = log.New(&logs, "", 0)
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
 	if strings.Contains(logs.String(), secret) || strings.Contains(logs.String(), "player_id") || strings.Contains(w.Body.String(), secret) || !strings.Contains(logs.String(), "class=") {
@@ -417,7 +429,7 @@ func TestHostedRejectsObsoleteConfirmationBeforeAdmission(t *testing.T) {
 	store := operationalFixture(t)
 	auth, sign, _ := hostedAuthFixture(t)
 	svc, _ := testApp(t, PreviewModel{})
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	// Include a still-valid confirmation created by the previous release.
 	ctx := context.WithValue(context.Background(), hostedContextKey{}, &hostedIdentity{User: "user_invited", Admission: "previous-admission"})
@@ -442,7 +454,7 @@ func TestHostedRejectsObsoleteConfirmationBeforeAdmission(t *testing.T) {
 		}
 	}
 	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
-	if !strings.Contains(w.Body.String(), "twenty questions") {
+	if !strings.Contains(w.Body.String(), "20 questions") {
 		t.Fatalf("quota bypass: %s", w.Body.String())
 	}
 }
@@ -451,11 +463,11 @@ func TestUnavailableHostedStateFailsClosed(t *testing.T) {
 	store := operationalFixture(t)
 	auth, sign, _ := hostedAuthFixture(t)
 	svc, _ := testApp(t, PreviewModel{})
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	store.Close()
 	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
-	if !strings.Contains(w.Body.String(), `"kind":"error"`) || strings.Contains(w.Body.String(), "table") {
+	if w.Code != 503 || !strings.Contains(w.Body.String(), `"kind":"error"`) || strings.Contains(w.Body.String(), "table") {
 		t.Fatalf("state outage admitted: %s", w.Body.String())
 	}
 }
@@ -471,9 +483,9 @@ func TestExpiredLeaseRecoversWithoutAllowingStaleRelease(t *testing.T) {
 	svc1, _ := testApp(t, waitingProviderModel{start1, finish1})
 	svc2, _ := testApp(t, waitingProviderModel{start2, finish2})
 	svc3, _ := testApp(t, PreviewModel{})
-	a := NewHostedHandler(svc1, HostedOptions{Mode: "preview", Auth: auth, State: store})
-	b := NewHostedHandler(svc2, HostedOptions{Mode: "preview", Auth: auth, State: store})
-	c := NewHostedHandler(svc3, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	a := NewHostedHandler(svc1, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
+	b := NewHostedHandler(svc2, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
+	c := NewHostedHandler(svc3, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
 	done1, done2 := make(chan struct{}), make(chan struct{})
 	go func() { hostedPost(a, token, `{"question":"Who led MLB in OPS?"}`); close(done1) }()
 	select {
@@ -494,7 +506,7 @@ func TestExpiredLeaseRecoversWithoutAllowingStaleRelease(t *testing.T) {
 	w := hostedPost(c, token, `{"question":"Who led MLB in OPS?"}`)
 	close(finish2)
 	<-done2
-	if !strings.Contains(w.Body.String(), "already have a question") {
+	if !strings.Contains(w.Body.String(), "already has a question") {
 		t.Fatalf("stale owner released new lease: %s", w.Body.String())
 	}
 }
@@ -516,12 +528,13 @@ func TestHostedComparisonRetainsCompletedAnswerOnWholeRequestTimeout(t *testing.
 	auth, sign, _ := hostedAuthFixture(t)
 	svc, _ := testApp(t, deadlineComparisonProvider{})
 	svc.Config.ComparisonMode = true
-	app := NewHostedHandler(svc, HostedOptions{Mode: "preview", Auth: auth, State: store})
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	req := httptest.NewRequest("POST", "/api/questions", strings.NewReader(`{"question":"What was Luis Vázquez's OPS in 2025?"}`)).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Vercel-Forwarded-For", "192.0.2.10")
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
 	var out Outcome
@@ -532,7 +545,7 @@ func TestHostedComparisonRetainsCompletedAnswerOnWholeRequestTimeout(t *testing.
 }
 
 func cleanupOperationalFixture(s *OperationalStore) {
-	for _, table := range []string{"baseball_confirmations", "baseball_spending", "baseball_allowances", "baseball_admissions", "baseball_users"} {
+	for _, table := range []string{"baseball_ip_admissions", "baseball_ip_leases", "baseball_confirmations", "baseball_spending", "baseball_allowances", "baseball_admissions", "baseball_users"} {
 		s.pool.Exec(context.Background(), "DELETE FROM "+table+" WHERE namespace=$1", s.namespace)
 	}
 }

@@ -2,9 +2,13 @@ package app
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -69,8 +73,9 @@ func (a *ClerkAuth) Authenticate(ctx context.Context, r *http.Request) (string, 
 }
 
 type hostedContextKey struct{}
-type hostedIdentity struct{ User, Admission string }
+type hostedIdentity struct{ User, Admission, LimiterKey string }
 type HostedOptions struct {
+	IPLimitKey     string
 	Mode           string
 	Auth           *ClerkAuth
 	PublishableKey string
@@ -119,8 +124,33 @@ func NewHostedHandler(service *QueryService, options HostedOptions) http.Handler
 				publicError(w, 401, "Please sign in with an invited account to ask a question.")
 				return
 			}
-			r = r.WithContext(context.WithValue(ctx, hostedContextKey{}, &hostedIdentity{User: id, Admission: randomToken()}))
+			key, err := networkLimiterKey(r, options.IPLimitKey)
+			if err != nil {
+				service.logFailure("identify question network", err)
+				publicError(w, 503, "Questions are temporarily unavailable. Please try again later.")
+				return
+			}
+			r = r.WithContext(context.WithValue(ctx, hostedContextKey{}, &hostedIdentity{User: id, LimiterKey: key, Admission: randomToken()}))
 		}
 		base.ServeHTTP(w, r)
 	})
+}
+
+// Only the Vercel ingress may supply this header; never expose the hosted
+// origin directly. Do not fall back to arbitrary forwarding headers or TCP peers.
+func networkLimiterKey(r *http.Request, secret string) (string, error) {
+	if len(secret) < 32 {
+		return "", errors.New("network limiter key unavailable")
+	}
+	values := r.Header.Values("X-Vercel-Forwarded-For")
+	if len(values) != 1 {
+		return "", errors.New("network address unavailable")
+	}
+	addr, err := netip.ParseAddr(strings.TrimSpace(values[0]))
+	if err != nil || addr.Zone() != "" || addr.IsUnspecified() || addr.IsMulticast() {
+		return "", errors.New("network address invalid")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("baseball-network-v1:" + addr.Unmap().String()))
+	return "ip:v1:" + hex.EncodeToString(mac.Sum(nil)), nil
 }
