@@ -1,7 +1,7 @@
 {
   "description": "Reference cases for the supplied CSV only. Expected data is exact; answer wording may vary. Source fields and player IDs are private developer evaluation metadata, not a browser response format.",
   "source": {
-    "path": "advanced-mlb-24-26.csv",
+    "path": "data/advanced-mlb-24-26.csv",
     "sha256": "60de4620c5e90e112a1c1142cd1504af42e46ece8ba816a1d21ea530a6b318ca",
     "rows": 1879
   },

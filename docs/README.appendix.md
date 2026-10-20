@@ -26,15 +26,15 @@ no external database server or CGO compiler is needed.
 
 ```sh
 go mod download
-go run ./cmd/import -csv advanced-mlb-24-26.csv -db mlb.db
-cp config.example.json config.json
+go run ./cmd/import -csv data/advanced-mlb-24-26.csv -db mlb.db
+cp config/example.json config.json
 ```
 
 Set `model` in `config.json` to your OpenAI model identifier and provide
 `OPENAI_API_KEY` in the server's environment. Then start the app:
 
 ```sh
-go run . -config config.json
+go run ./cmd/server -config config.json
 ```
 
 Open <http://127.0.0.1:8080>. Configuration changes require a restart.

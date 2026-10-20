@@ -6,6 +6,7 @@ The hosting implementation keeps local configuration private and adds a separate
 
 - Hobby team: `jtooshs-projects`; linked project: `baseball-mcp`.
 - Go framework, gated build command and Vercel deployment protection are configured.
+- The server entry point is `cmd/server/main.go`; the gated build compiles `./cmd/server`. Hosted defaults in `config/hosted.json`, the CSV in `data/`, and browser assets in `internal/app/static/` are embedded in the executable, so deployment does not depend on its working directory.
 - `baseball.jamesteuscher.click` is attached to this project. Existing apex DNS and the `exercise-app` project are untouched.
 - DNS and HTTPS are verified for CNAME `baseball` → `ae774825b448a93a.vercel-dns-017.com.` Recheck with `npx vercel domains verify baseball.jamesteuscher.click --scope jtooshs-projects` before future DNS changes.
 - GitHub project/org variables are set. Automatic test-gated publishing is enabled after successful Preview and Production smoke checks.

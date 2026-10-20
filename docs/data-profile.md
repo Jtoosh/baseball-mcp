@@ -1,6 +1,6 @@
 # Batting CSV profile
 
-Inspected file: `advanced-mlb-24-26.csv`.
+Inspected file: `data/advanced-mlb-24-26.csv`.
 
 SHA-256: `60de4620c5e90e112a1c1142cd1504af42e46ece8ba816a1d21ea530a6b318ca`.
 

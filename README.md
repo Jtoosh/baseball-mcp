@@ -56,3 +56,13 @@ request at a time. A shared monthly model-spending allowance can pause questions
 ## More info
 
 For more details about data and answer rules injected into the LLM prompts, and local usage, see the [readme appendix](docs/README.appendix.md).
+
+Project layout:
+
+- `cmd/`: server and snapshot-import commands.
+- `internal/app/`: application, HTTP handlers, embedded browser assets, and tests.
+- `internal/data/`: read-only SQLite access and CSV import.
+- `config/`: example local configuration and embedded hosted defaults.
+- `data/`: the fixed MLB batting snapshot.
+- `evaluation/`: independently verified reference answers.
+- `docs/` and `scripts/`: design, setup instructions, and deployment tooling.

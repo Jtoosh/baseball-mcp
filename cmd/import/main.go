@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	source := flag.String("csv", "advanced-mlb-24-26.csv", "MLB export")
+	source := flag.String("csv", "data/advanced-mlb-24-26.csv", "MLB export")
 	database := flag.String("db", "mlb.db", "output snapshot database")
 	flag.Parse()
 	if err := data.Import(*source, *database); err != nil {

@@ -43,4 +43,4 @@ baseball-mcp
 .env*
 
 # Hosted build output
-server
+/server

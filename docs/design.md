@@ -40,13 +40,14 @@ Working design decisions from the project interview. The browser-first applicati
 
 - Use an admin JSON configuration file with a default prompting strategy and optional comparison mode.
 - Use two strategies: schema plus instructions, and the same prompt plus worked question/SQL examples. Evaluation questions are separate from worked prompt examples.
-- Use the OpenAI Go SDK inside `llm.go`. The admin chooses the model through configuration; initially hold the model constant across both strategies and SQL/answer generation.
-- `main.go`: startup and composition.
-- `handlers.go`: HTTP request and response handling.
-- `query.go`: interpretation, confirmation, SQL generation, execution, correction, and answer generation.
-- `llm.go`: model calls.
-- `database.go`: database access.
-- `static/index.html`: browser interface.
+- Use the OpenAI Go SDK inside `internal/app/llm.go`. The admin chooses the model through configuration; initially hold the model constant across both strategies and SQL/answer generation.
+- `cmd/server/main.go`: command-line entry point.
+- `internal/app/run.go`: startup and composition.
+- `internal/app/handlers.go`: HTTP request and response handling.
+- `internal/app/query.go`: interpretation, confirmation, SQL generation, execution, correction, and answer generation.
+- `internal/app/llm.go`: model calls.
+- `internal/app/database.go`: database access.
+- `internal/app/static/index.html`: browser interface.
 - Defer `mcp.go`; a later MCP adapter can call the same question workflow.
 - Preserve local development and add hosted deployment under the approved [hosting specification](hosting-spec.md).
 
@@ -58,7 +59,7 @@ Controlled regression tests use independently checked reference answers from the
 
 ## Verified dataset
 
-The corrected export, `advanced-mlb-24-26.csv`, has unique player-season keys and stable numeric player IDs, but two distinct players share the name Max Muncy. Use IDs for identity. Hosted questions let the model interpret ambiguous names directly; local evaluation retains its configured clarification behavior. See `data-profile.md` for the inspected fields, coverage, and reference results.
+The corrected export, `data/advanced-mlb-24-26.csv`, has unique player-season keys and stable numeric player IDs, but two distinct players share the name Max Muncy. Use IDs for identity. Hosted questions let the model interpret ambiguous names directly; local evaluation retains its configured clarification behavior. See `data-profile.md` for the inspected fields, coverage, and reference results.
 
 The corrected CSV includes the traditional batting statistics needed for all initial examples, including singles and exported OPS. Import all available metrics, preserving their exported values. Source filter settings and retrieval dates should be recorded when available; the CSV itself does not contain them.
 

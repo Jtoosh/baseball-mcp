@@ -24,7 +24,7 @@ changed. Fix and post-fix verification are outside this investigation.
    `Import`). The name is stored as `Ramírez, José`, with accents on both names.
    The schema defines ordinary `TEXT`, with no accent-insensitive collation.
 2. The planner receives the question, schema, metric meanings, and seasons,
-   but no general list of matching stored player names or IDs (`llm.go`,
+   but no general list of matching stored player names or IDs (`internal/app/llm.go`,
    `OpenAIModel.Plan`). It must generate name predicates without that grounding.
    The examples strategy even demonstrates an exact name equality filter.
    The existing private identity mechanism handles a single confirmed player;
@@ -42,7 +42,7 @@ changed. Fix and post-fix verification are outside this investigation.
    from missing data. Public-text validation does not check this distinction.
 
 Both local and hosted questions share this query/answer path. The hosted
-snapshot is imported from the embedded CSV (`snapshot.go`). Hosted diagnostics
+snapshot is imported from the embedded CSV (`internal/app/snapshot.go`). Hosted diagnostics
 do not retain successful SQL, prompts, tables, or answers, so the original
 query cannot be recovered from those application logs.
 
@@ -92,7 +92,7 @@ The temporary replay was removed after diagnosis.
 To reproduce the database evidence from the repository root:
 
 ```sh
-go run ./cmd/import -csv advanced-mlb-24-26.csv -db /tmp/ramirez-investigation.db
+go run ./cmd/import -csv data/advanced-mlb-24-26.csv -db /tmp/ramirez-investigation.db
 sqlite3 -readonly -header -column /tmp/ramirez-investigation.db <<'SQL'
 SELECT p.name,s.year,s.home_run,s.on_base_plus_slg,s.pa
 FROM players p JOIN stats s ON p.player_id=s.player_id
