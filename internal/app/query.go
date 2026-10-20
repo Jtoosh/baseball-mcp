@@ -120,11 +120,6 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 			q.logFailure("admit question", errors.New("operational state required"))
 			return Outcome{Kind: "error", HTTPStatus: 503, Message: "Questions are temporarily unavailable. Please try again later."}
 		}
-		if live, ok := q.Model.(*OpenAIModel); ok && live.Budget != nil {
-			if err := live.Budget.available(ctx, live.ModelName); err != nil {
-				return q.failure("check monthly allowance", err)
-			}
-		}
 		release, err := q.State.admit(ctx, req, q.Config.HourlyQuestionLimit)
 		if err != nil {
 			var denied *admissionFailure

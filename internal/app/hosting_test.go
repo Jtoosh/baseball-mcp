@@ -178,44 +178,50 @@ func TestHostedSnapshotAndControlledPreviewPreserveReferenceAnswer(t *testing.T)
 	}
 }
 
-func TestProductionMonthlyAllowanceKeepsUncertainSpendingUntilUTCReset(t *testing.T) {
+func TestProductionQuestionsIgnoreLegacySpendingAndPriceExpiry(t *testing.T) {
 	store := operationalFixture(t)
-	now := time.Date(2026, 10, 31, 23, 59, 0, 0, time.UTC)
+	now := time.Date(2026, 11, 30, 23, 59, 0, 0, time.UTC)
 	store.Now = func() time.Time { return now }
+	// An existing deployment may have fully spent and uncertain historical records.
+	_, err := store.pool.Exec(context.Background(), `INSERT INTO baseball_allowances(namespace,month,spent) VALUES($1,'2026-11',10000000000);`, store.namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.pool.Exec(context.Background(), `INSERT INTO baseball_spending(namespace,id,month,amount,settled,created) VALUES($1,'legacy','2026-11',10000000000,false,$2)`, store.namespace, now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var calls atomic.Int64
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		var payload map[string]any
-		json.NewDecoder(r.Body).Decode(&payload)
-		if payload["max_output_tokens"] != float64(2048) || payload["service_tier"] != "default" || payload["store"] != false {
-			t.Errorf("unbounded request: %+v", payload)
-		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"id":"resp_fixture","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"status\":\"unsupported\",\"message\":\"Only batting questions are supported.\",\"sql\":\"\",\"seasons\":[],\"columns\":[],\"interpretation\":\"\"}"}]}]}`)
+		fmt.Fprint(w, `{"id":"fixture","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"status\":\"unsupported\",\"message\":\"Only batting questions are supported.\",\"sql\":\"\",\"seasons\":[],\"columns\":[],\"interpretation\":\"\"}"}]}]}`)
 	}))
 	t.Cleanup(provider.Close)
-	model := &OpenAIModel{Client: openai.NewClient(option.WithAPIKey("test-only"), option.WithBaseURL(provider.URL+"/"), option.WithMaxRetries(0)), ModelName: "gpt-6.1-sol", Budget: &SpendingGuard{State: store}}
+	model := &OpenAIModel{Client: openai.NewClient(option.WithAPIKey("test-only"), option.WithBaseURL(provider.URL+"/"), option.WithMaxRetries(0)), ModelName: "gpt-6.1-sol"}
 	svc, _ := testApp(t, model)
-	svc.State = store
 	auth, sign, _ := hostedAuthFixture(t)
-	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
+
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	payload := `{"question":"Who pitched best?"}`
-	if w := hostedPost(app, token, payload); !strings.Contains(w.Body.String(), `"kind":"unsupported"`) {
-		t.Fatalf("initial: %s", w.Body.String())
+	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
+	for i := 0; i < 3; i++ {
+		w := hostedPost(app, token, `{"question":"Who pitched best?"}`)
+		if !strings.Contains(w.Body.String(), `"kind":"unsupported"`) {
+			t.Fatalf("legacy spending or expired pricing blocked question: %s", w.Body.String())
+		}
 	}
-	w := hostedPost(app, token, payload)
-	if calls.Load() != 1 || !strings.Contains(w.Body.String(), "2026-11-01") || strings.Contains(w.Body.String(), "table") {
-		t.Fatalf("budget bypass: calls=%d %s", calls.Load(), w.Body.String())
+	restarted, err := OpenOperationalStore(context.Background(), os.Getenv("TEST_DATABASE_URL"), store.namespace)
+	if err != nil {
+		t.Fatal(err)
 	}
-	w = hostedPost(app, token, `{"question":"What was Max Muncy's OPS in 2025?"}`)
-	if !strings.Contains(w.Body.String(), "monthly question allowance") || strings.Contains(w.Body.String(), "confirmation") {
-		t.Fatalf("paused allowance still admitted clarification: %s", w.Body.String())
-	}
+	defer restarted.Close()
+	restarted.Now = func() time.Time { return now }
+	svc, _ = testApp(t, model)
+	app = NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: restarted})
 	now = now.Add(2 * time.Minute)
-	w = hostedPost(app, token, payload)
-	if calls.Load() != 2 || !strings.Contains(w.Body.String(), `"kind":"unsupported"`) {
-		t.Fatalf("UTC rollover: %d %s", calls.Load(), w.Body.String())
+	w := hostedPost(app, token, `{"question":"Who pitched best?"}`)
+	if calls.Load() != 4 || !strings.Contains(w.Body.String(), `"kind":"unsupported"`) {
+		t.Fatalf("calendar boundary blocked question: calls=%d %s", calls.Load(), w.Body.String())
 	}
 }
 
@@ -337,45 +343,8 @@ func TestControlledPreviewNeverUsesProductionKeyAndRejectsUnlistedQuestions(t *t
 	}
 }
 
-func TestConcurrentInvitedUsersCannotOverbookMonthlyAllowance(t *testing.T) {
-	store := operationalFixture(t)
-	store.Now = func() time.Time { return time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC) }
-	started, finish := make(chan struct{}), make(chan struct{})
-	var calls atomic.Int64
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		close(started)
-		<-finish
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"id":"fixture","status":"completed","output":[]}`)
-	}))
-	t.Cleanup(provider.Close)
-	model := func() *OpenAIModel {
-		return &OpenAIModel{Client: openai.NewClient(option.WithAPIKey("test-only"), option.WithBaseURL(provider.URL+"/"), option.WithMaxRetries(0)), ModelName: "gpt-6.1-sol", Budget: &SpendingGuard{State: store}}
-	}
-	svc1, _ := testApp(t, model())
-	svc2, _ := testApp(t, model())
-	auth, sign, _ := hostedAuthFixture(t)
-	a := NewHostedHandler(svc1, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
-	b := NewHostedHandler(svc2, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
-	token1 := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	token2 := sign("user_second", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-	done := make(chan *httptest.ResponseRecorder, 1)
-	go func() { done <- hostedPost(a, token1, `{"question":"Who led MLB in OPS?"}`) }()
-	select {
-	case <-started:
-	case <-time.After(3 * time.Second):
-		close(finish)
-		t.Fatal("provider did not start")
-	}
-	w := hostedIPPost(b, token2, "192.0.2.11", "")
-	close(finish)
-	<-done
-	if calls.Load() != 1 || !strings.Contains(w.Body.String(), "monthly question allowance") {
-		t.Fatalf("overbooked: calls=%d %s", calls.Load(), w.Body.String())
-	}
-}
-func TestTrustworthyUsagePermitsFurtherQuestionsWithoutRefundingMissingUsage(t *testing.T) {
+func TestQuestionsWithReportedUsageRemainAvailable(t *testing.T) {
+
 	store := operationalFixture(t)
 	store.Now = func() time.Time { return time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC) }
 	var calls atomic.Int64
@@ -385,7 +354,7 @@ func TestTrustworthyUsagePermitsFurtherQuestionsWithoutRefundingMissingUsage(t *
 		fmt.Fprint(w, `{"id":"resp_fixture","model":"gpt-6.1-sol","service_tier":"default","status":"completed","usage":{"input_tokens":100,"output_tokens":30,"total_tokens":130,"input_tokens_details":{"cached_tokens":20,"cache_write_tokens":50},"output_tokens_details":{"reasoning_tokens":10}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"status\":\"unsupported\",\"message\":\"Only batting questions are supported.\",\"sql\":\"\",\"seasons\":[],\"columns\":[],\"interpretation\":\"\"}"}]}]}`)
 	}))
 	t.Cleanup(provider.Close)
-	model := &OpenAIModel{Client: openai.NewClient(option.WithAPIKey("test-only"), option.WithBaseURL(provider.URL+"/"), option.WithMaxRetries(0)), ModelName: "gpt-6.1-sol", Budget: &SpendingGuard{State: store}}
+	model := &OpenAIModel{Client: openai.NewClient(option.WithAPIKey("test-only"), option.WithBaseURL(provider.URL+"/"), option.WithMaxRetries(0)), ModelName: "gpt-6.1-sol"}
 	svc, _ := testApp(t, model)
 	auth, sign, _ := hostedAuthFixture(t)
 	app := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
@@ -393,7 +362,7 @@ func TestTrustworthyUsagePermitsFurtherQuestionsWithoutRefundingMissingUsage(t *
 	for i := 0; i < 3; i++ {
 		w := hostedPost(app, token, `{"question":"Who pitched best?"}`)
 		if !strings.Contains(w.Body.String(), `"kind":"unsupported"`) {
-			t.Fatalf("trusted usage did not settle: %s", w.Body.String())
+			t.Fatalf("reported usage blocked question: %s", w.Body.String())
 		}
 	}
 	if calls.Load() != 3 {

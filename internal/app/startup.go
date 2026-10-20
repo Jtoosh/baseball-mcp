@@ -16,6 +16,16 @@ import (
 )
 
 func hostedConfig(c Config) (Config, error) {
+	switch os.Getenv("QUESTIONS_PAUSED") {
+	case "":
+	case "true":
+		c.QuestionsPaused = true
+	case "false":
+		c.QuestionsPaused = false
+	default:
+		return c, errors.New("QUESTIONS_PAUSED must be true or false")
+	}
+
 	platform := os.Getenv("VERCEL_ENV")
 	if os.Getenv("VERCEL") == "1" && platform == "" {
 		return c, errors.New("hosted deployment environment is missing")
@@ -142,7 +152,6 @@ func startHosted(c Config) (http.Handler, func(), error) {
 		}
 		live := NewOpenAIModel(c.Model)
 		live.Client = openai.NewClient(option.WithAPIKey(os.Getenv("OPENAI_API_KEY")), option.WithBaseURL("https://api.openai.com/v1/"), option.WithMaxRetries(0))
-		live.Budget = &SpendingGuard{State: state, Profile: c.PricingProfile}
 		model = live
 	}
 	service := NewQueryService(db, model, c, logger)

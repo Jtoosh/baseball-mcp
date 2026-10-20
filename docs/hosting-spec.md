@@ -1,5 +1,8 @@
 ## Problem Statement
 
+Historical hosting plan: the public-access spec [#25](https://github.com/Jtoosh/baseball-mcp/issues/25) supersedes its sign-in and spending policy. Current operational instructions are in [hosting/setup.md](hosting/setup.md); ADR 0005 replaces the monthly allowance and reservations with prepaid provider balance.
+
+
 **October 2026 revision:** Hosted questions use direct interpretation, including vague metrics and same-name players, without confirmation or revision panels. Each clarification by the user is a fresh, complete question and counts toward the ordinary hourly allowance. Obsolete confirmation requests are rejected before admission. The browser renders the model's safe Markdown answer, including any model-written tables, with no separate supporting-results table or checkbox. This supersedes the pending-confirmation and optional-table requirements below; existing operational tables remain for schema compatibility. Controlled Preview retains its fixed supported questions and makes no paid model calls. Local evaluation controls are unchanged.
 
 The owner wants invited people to use the MLB batting question application at a custom subdomain without running Go locally. A public deployment currently exposes unprotected, paid model calls; local confirmation memory and log files do not survive independent hosted instances. Hosting must remain on free service tiers while keeping production OpenAI question usage within a shared $10 monthly allowance.

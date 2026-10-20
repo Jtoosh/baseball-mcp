@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"io"
@@ -31,13 +32,20 @@ func NewHandler(service *QueryService) http.Handler {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		body, _ := browserFiles.ReadFile("static/index.html")
+		if service.Config.QuestionsPaused {
+			body = bytes.Replace(body, []byte(`id="pause-notice" role="status" hidden`), []byte(`id="pause-notice" role="status"`), 1)
+		}
 		w.Write(body)
 	})
 	mux.HandleFunc("GET /api/client-config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"mode": "local"})
+		json.NewEncoder(w).Encode(map[string]any{"mode": "local", "questions_paused": service.Config.QuestionsPaused})
 	})
 	mux.HandleFunc("POST /api/questions", func(w http.ResponseWriter, r *http.Request) {
+		if service.Config.QuestionsPaused {
+			publicError(w, http.StatusServiceUnavailable, "Questions are temporarily unavailable")
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		r.Body = http.MaxBytesReader(w, r.Body, 16384)
 		dec := json.NewDecoder(r.Body)

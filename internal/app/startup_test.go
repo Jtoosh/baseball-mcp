@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/base64"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -87,6 +88,47 @@ func TestHostedAllowanceConfigurationRejectsNonpositiveValues(t *testing.T) {
 			writeInspectionConfig(t, path, `{"model":"fixture","hourly_question_limit":`+amount+`}`)
 			if _, err := LoadConfig(path); err == nil {
 				t.Fatal("nonpositive configured allowance accepted")
+			}
+		})
+	}
+}
+
+func TestQuestionPauseConfigurationIsValidatedAndDefaultsToAvailable(t *testing.T) {
+	for _, setting := range []struct {
+		raw    string
+		paused bool
+		valid  bool
+	}{
+		{`{"model":"controlled"}`, false, true},
+		{`{"model":"controlled","questions_paused":true}`, true, true},
+		{`{"model":"controlled","questions_paused":false}`, false, true},
+		{`{"model":"controlled","questions_paused":"true"}`, false, false},
+	} {
+		c, err := decodeConfig(strings.NewReader(setting.raw))
+		if (err == nil) != setting.valid {
+			t.Fatalf("configuration validation: %s: %v", setting.raw, err)
+		}
+		if err == nil && c.QuestionsPaused != setting.paused {
+			t.Fatalf("pause setting: %s: %v", setting.raw, c.QuestionsPaused)
+		}
+	}
+	for _, setting := range []struct {
+		value  string
+		paused bool
+		valid  bool
+	}{
+		{"", false, true}, {"true", true, true}, {"false", false, true}, {"yes", false, false},
+	} {
+		t.Run("environment_"+setting.value, func(t *testing.T) {
+			t.Setenv("VERCEL_ENV", "")
+			t.Setenv("VERCEL", "")
+			t.Setenv("QUESTIONS_PAUSED", setting.value)
+			c, err := hostedConfig(Config{})
+			if (err == nil) != setting.valid {
+				t.Fatalf("environment validation: %v", err)
+			}
+			if err == nil && c.QuestionsPaused != setting.paused {
+				t.Fatalf("pause environment: %+v", c)
 			}
 		})
 	}

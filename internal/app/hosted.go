@@ -108,10 +108,14 @@ func NewHostedHandler(service *QueryService, options HostedOptions) http.Handler
 			if options.Auth != nil {
 				issuer = options.Auth.Issuer
 			}
-			json.NewEncoder(w).Encode(map[string]string{"mode": options.Mode, "publishable_key": options.PublishableKey, "issuer": issuer})
+			json.NewEncoder(w).Encode(map[string]any{"mode": options.Mode, "publishable_key": options.PublishableKey, "issuer": issuer, "questions_paused": service.Config.QuestionsPaused})
 			return
 		}
 		if r.URL.Path == "/api/questions" {
+			if r.Method == http.MethodPost && service.Config.QuestionsPaused {
+				publicError(w, http.StatusServiceUnavailable, "Questions are temporarily unavailable")
+				return
+			}
 			ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 			defer cancel()
 			if options.Auth == nil {
