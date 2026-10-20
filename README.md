@@ -1,12 +1,11 @@
 # MLB batting questions
 
-Ask baseball questions in plain English and get answers backed by MLB batting
-statistics. The app supports player lookups, season leaders, top-ten overlaps,
-and advanced metrics, with answers formatted in Markdown.
+Ask baseball questions in plain English and get answers from official MLB batting
+statistics. The app supports player lookups, season leaders, and top-ten rankings using basic statistics and advanced metrics, with answers formatted in Markdown.
 
 ## How it works
 
-A Go server sends user input to ChatGPT via API key. The user input is sent with the database schema, and the LLM generates a read-only query. The Go server runs it against a read-only SQLite snapshot, then asks the model to explain the results. Queries are restricted to baseball data and
+A Go server sends user input to ChatGPT via HTTP using an API key. The user input is sent with the database schema, and the LLM generates a read-only query. The Go server runs it against a read-only SQLite snapshot, then asks the model to explain the results. Queries are restricted to baseball data and
 have a ten-second execution deadline.
 
 Automated tests check database results and application behavior with controlled
@@ -24,7 +23,7 @@ Further reading:
 
 This application was built entirely by coding agents, orchestrated by myself, James Teuscher. My development workflow utilizes the popular agent skills [from Matt Pocock](https://github.com/mattpocock/skills) to produce better results. My basic process looks like this:
 
-1. Describe the next feature or task to implement to the agent. Instruct the agent to invoke the `grill-me` skill to ask questions about any decision points it encounters. This allows me to make the decisions about the feature and be more in control of the application's architecture and design patterns.
+1. First, I describe the next feature or task to implement to the agent. I instruct the agent to invoke the `grill-me` skill to ask questions about any decision points it encounters. This allows me to make the decisions about the feature and be more in control of the application's architecture and design patterns.
 2. After the agent finished using `grill-me`, I instruct it to use `to-spec` to create a comprehensive specification for agents. This provides user stories, implementation decisions, and clear non-goals to the agents.
 3. Next, I invoke `to-tickets` to break the user stories and implementation into specific packages for the agents to work on and commit in increments. Once these tickets are generated and verified, I invoke the `implement` skill. This skill will use agent-invoked skills like `tdd` and `code-review` to implement, test, iterate, and review code independently.
 4. Before merging any pull requests into main, I test all changes manually on my local machine. Any bugs or mistakes found I report to the agent, usually invoking the `diagnosing-bugs` skill.
