@@ -37,6 +37,14 @@ This intentionally conservative profile can block simultaneous paid calls and ca
 
 Twenty newly admitted questions per user are allowed in a rolling hour. Each new question, including a more specific question clarifying an earlier answer, uses a new admission; normal admitted failures count. Obsolete confirmation/revision requests are rejected before admission. Requests have a 120-second parent deadline, ten seconds per SQL execution and at most one correction per strategy. One active request per user uses a 125-second recoverable lease. Lease recovery does not refund uncertain model spending.
 
+## Pause new questions
+
+Set the server environment variable `QUESTIONS_PAUSED=true` to pause new questions. It defaults to `false`; only the exact values `true` and `false` are accepted, and an invalid value prevents startup. The optional administrator JSON setting `questions_paused` is also a boolean, defaults to `false`, and is overridden by a nonempty `QUESTIONS_PAUSED` value. Existing local configuration remains valid.
+
+For Vercel, change `QUESTIONS_PAUSED` in the intended environment (Production or Preview), then create a new deployment through the test-gated workflow for that environment. Editing an environment variable does not change existing deployments: the updated setting takes effect when traffic reaches the newly deployed version. Old instances and requests admitted before that cutover may finish under their existing deadlines. This is a deployment-time switch, with no polling or instant global cancellation. Set `QUESTIONS_PAUSED=false` and deploy again to resume; rolling back to an older deployment restores that deployment's setting.
+
+While paused, the page and assets stay available and display “Questions are temporarily unavailable”. New question submissions return HTTP 503 with the same safe message before acquiring an admission or active-request lease or starting model work. The browser retains its previous answer and stops its loading indicator. Pause and resume leave existing question allowances and leases intact. Reload the page after a deployment to refresh the displayed pause notice; the server always enforces its current setting on submissions.
+
 ## Diagnostics and verification status
 
 Hosted errors go to administrator runtime logs with bounded stage/class identifiers. Raw prompts, SQL, tables, answers and connection/provider errors are not logged. Full evaluation histories are not recorded. New operational records contain admissions, leases and budget accounting only. Legacy confirmation tables remain for schema compatibility, but hosted requests cannot create or resume confirmations; old hourly admissions are pruned on admission.
