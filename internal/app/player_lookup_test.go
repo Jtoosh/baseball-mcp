@@ -343,7 +343,7 @@ func TestHostedQuestionResolvesUnaccentedComparison(t *testing.T) {
 		}
 		return AnswerPresentation{Text: "In the 2026 snapshot, José Ramírez had 12 HR over 544 PA, and Junior Caminero had 42 HR over 702 PA."}
 	})
-	app := NewHostedHandler(service, HostedOptions{Mode: "production", Auth: auth, State: store})
+	app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "production", Auth: auth, State: store})
 	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 	response := hostedPost(app, token, `{"question":"Compare Jose Ramirez and junior caminero"}`)
 	var got Outcome

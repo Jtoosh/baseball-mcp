@@ -45,7 +45,7 @@ func TestHostedPausePreservesAdmissionsAndActiveQuestionsAcrossResume(t *testing
 	paused, _ := testApp(t, waitingErrorModel{"paused request reached provider"})
 	paused.Config.QuestionsPaused = true
 	resumed, _ := testApp(t, PreviewModel{})
-	options := HostedOptions{Mode: "preview", Auth: auth, State: store}
+	options := HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store}
 	runningHandler := NewHostedHandler(running, options)
 	pausedHandler := NewHostedHandler(paused, options)
 	resumedHandler := NewHostedHandler(resumed, options)
@@ -70,7 +70,7 @@ func TestHostedPausePreservesAdmissionsAndActiveQuestionsAcrossResume(t *testing
 		}
 	}
 	busy := hostedPost(resumedHandler, token, `{"question":"Who led MLB in OPS?"}`)
-	if !strings.Contains(busy.Body.String(), "already have a question") {
+	if !strings.Contains(busy.Body.String(), "already has a question") {
 		t.Fatalf("resume discarded active lease: %s", busy.Body.String())
 	}
 	close(finish)
@@ -84,7 +84,7 @@ func TestHostedPausePreservesAdmissionsAndActiveQuestionsAcrossResume(t *testing
 		}
 	}
 	response := hostedPost(resumedHandler, token, `{"question":"Who led MLB in OPS?"}`)
-	if !strings.Contains(response.Body.String(), "twenty questions") {
+	if !strings.Contains(response.Body.String(), "20 questions") {
 		t.Fatalf("resume reset admissions: %s", response.Body.String())
 	}
 }
@@ -94,7 +94,7 @@ func TestHostedPauseDeniesNewQuestionsBeforeAuthorizationOrStateWork(t *testing.
 	svc.Config.QuestionsPaused = true
 	// A paused deployment can return its safe outcome even when authorization or
 	// operational storage is unavailable; neither is needed to refuse new work.
-	handler := NewHostedHandler(svc, HostedOptions{Mode: "preview"})
+	handler := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview"})
 	response := hostedPost(handler, "", `{"question":"Who led MLB in OPS?"}`)
 	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), `"message":"Questions are temporarily unavailable"`) {
 		t.Fatalf("pause depended on authorization: %d %s", response.Code, response.Body.String())

@@ -11,7 +11,7 @@ import (
 )
 
 type Config struct {
-	QuestionsPaused            bool            `json:"questions_paused,omitempty"`
+	QuestionsPaused bool `json:"questions_paused,omitempty"`
 	// Retained only to accept existing administrator configuration; never enforced.
 	PricingProfile             json.RawMessage `json:"pricing_profile,omitempty"`
 	DeveloperSkipClarification bool            `json:"developer_skip_clarification,omitempty"`
@@ -26,6 +26,8 @@ type Config struct {
 	ClerkIssuer                string          `json:"clerk_issuer,omitempty"`
 	ClerkPublicKey             string          `json:"clerk_publishable_key,omitempty"`
 	PublicOrigin               string          `json:"public_origin,omitempty"`
+	HourlyQuestionLimit        int             `json:"hourly_question_limit,omitempty"`
+	ipLimitKey                 string
 	operationalDSN             string
 }
 
@@ -42,7 +44,7 @@ func LoadConfig(path string) (Config, error) {
 }
 func decodeConfig(input io.Reader) (Config, error) {
 	var e error
-	c := Config{DefaultStrategy: StrategySchema, Database: "mlb.db", Listen: "127.0.0.1:8080", DeveloperLog: ".private/developer.log"}
+	c := Config{HourlyQuestionLimit: 20, DefaultStrategy: StrategySchema, Database: "mlb.db", Listen: "127.0.0.1:8080", DeveloperLog: ".private/developer.log"}
 	dec := json.NewDecoder(input)
 	dec.DisallowUnknownFields()
 	if e = dec.Decode(&c); e != nil {
@@ -51,6 +53,9 @@ func decodeConfig(input io.Reader) (Config, error) {
 	var tail any
 	if e = dec.Decode(&tail); e != io.EOF {
 		return c, errors.New("configuration must be a single object")
+	}
+	if c.HourlyQuestionLimit < 1 {
+		return c, errors.New("hourly_question_limit must be a positive integer")
 	}
 	if c.Model == "" {
 		return c, errors.New("configure a model identifier")

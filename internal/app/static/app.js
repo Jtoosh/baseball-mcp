@@ -152,6 +152,12 @@ async function ask(request) {
     if (generation !== accountGeneration) return;
     if (!data || !['answer', 'clarification', 'unsupported', 'error'].includes(data.kind)) throw new Error('Invalid response');
     if (!response.ok && data.kind !== 'error') throw new Error('Request failed');
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get('Retry-After'));
+      if (Number.isFinite(seconds) && seconds > 0) {
+        data.message = (data.message || 'Your network is sending questions too quickly.') + ' You can retry in ' + Math.ceil(seconds) + ' seconds.';
+      }
+    }
     if (data.kind === 'error') {
       showFailure(data, request.question);
     } else {

@@ -23,6 +23,8 @@ type QuestionRequest struct {
 	Choice         string `json:"choice,omitempty"`
 }
 type Outcome struct {
+	HTTPStatus    int               `json:"-"`
+	RetryAfter    int               `json:"-"`
 	SQLInspection []SQLInspection   `json:"sql_inspection,omitempty"`
 	Kind          string            `json:"kind"`
 	Message       string            `json:"message,omitempty"`
@@ -115,11 +117,17 @@ func (q *QueryService) Ask(ctx context.Context, req QuestionRequest) (outcome Ou
 			return Outcome{Kind: "error", Message: "Please confirm the proposed interpretation or revise it using its confirmation."}
 		}
 		if q.State == nil {
-			return q.failure("admit question", errors.New("operational state required"))
+			q.logFailure("admit question", errors.New("operational state required"))
+			return Outcome{Kind: "error", HTTPStatus: 503, Message: "Questions are temporarily unavailable. Please try again later."}
 		}
-		release, err := q.State.admit(ctx, req)
+		release, err := q.State.admit(ctx, req, q.Config.HourlyQuestionLimit)
 		if err != nil {
-			return q.failure("admit question", err)
+			var denied *admissionFailure
+			if errors.As(err, &denied) {
+				return Outcome{Kind: "error", Message: denied.message, HTTPStatus: 429, RetryAfter: denied.retryAfter}
+			}
+			q.logFailure("admit question", err)
+			return Outcome{Kind: "error", HTTPStatus: 503, Message: "Questions are temporarily unavailable. Please try again later."}
 		}
 		defer release()
 	}

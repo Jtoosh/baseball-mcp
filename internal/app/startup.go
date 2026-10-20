@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,6 +50,23 @@ func hostedConfig(c Config) (Config, error) {
 		c.Listen = ":" + port
 	} else {
 		c.Listen = ":8080"
+	}
+	c.ipLimitKey = os.Getenv("IP_LIMIT_KEY")
+	if len(c.ipLimitKey) < 32 {
+		return c, errors.New("configure a shared server-only IP_LIMIT_KEY of at least 32 bytes")
+	}
+	if c.HourlyQuestionLimit == 0 {
+		c.HourlyQuestionLimit = 20
+	}
+	if value, exists := os.LookupEnv("HOURLY_QUESTION_LIMIT"); exists {
+		limit, err := strconv.Atoi(value)
+		if err != nil || limit < 1 {
+			return c, errors.New("HOURLY_QUESTION_LIMIT must be a positive integer")
+		}
+		c.HourlyQuestionLimit = limit
+	}
+	if c.HourlyQuestionLimit < 1 {
+		return c, errors.New("hourly_question_limit must be a positive integer")
 	}
 	c.ClerkIssuer = os.Getenv("CLERK_ISSUER")
 	c.ClerkPublicKey = os.Getenv("CLERK_PUBLISHABLE_KEY")
@@ -139,5 +157,5 @@ func startHosted(c Config) (http.Handler, func(), error) {
 	service := NewQueryService(db, model, c, logger)
 	service.State = state
 	auth := NewClerkAuth(os.Getenv("CLERK_SECRET_KEY"), c.ClerkIssuer, c.PublicOrigin, nil)
-	return NewHostedHandler(service, HostedOptions{Mode: c.Environment, Auth: auth, PublishableKey: c.ClerkPublicKey, State: state}), func() { state.Close(); cleanup() }, nil
+	return NewHostedHandler(service, HostedOptions{IPLimitKey: c.ipLimitKey, Mode: c.Environment, Auth: auth, PublishableKey: c.ClerkPublicKey, State: state}), func() { state.Close(); cleanup() }, nil
 }

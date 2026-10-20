@@ -49,6 +49,9 @@ A person granted access by the site owner through an email invitation. An invita
 **Question admission**:
 Acceptance of one independent question for processing. Clarifying or revising its pending interpretation remains part of that question.
 
+**Network allowance**:
+The maximum number of independent questions accepted from a shared network address during the preceding hour. Visitors on the same network share that allowance.
+
 **Monthly allowance**:
 A retired policy limiting this application's model spending within a UTC calendar month. Public access has no application monetary ceiling.
 

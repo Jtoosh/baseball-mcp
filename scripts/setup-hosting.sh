@@ -246,6 +246,22 @@ write_env PRODUCTION_DATABASE_URL "$PRODUCTION_DATABASE_URL"
 write_env PREVIEW_DATABASE_URL "$PREVIEW_DATABASE_URL"
 put_vercel DATABASE_URL "$PRODUCTION_DATABASE_URL" production secret
 put_vercel DATABASE_URL "$PREVIEW_DATABASE_URL" preview secret
+# Reuse each environment's existing key on every run. Rotating it resets the
+# network identities, so persist it alongside the owner credentials.
+for admission_target in production preview; do
+  case "$admission_target" in
+    production) admission_key_name=PRODUCTION_IP_LIMIT_KEY ;;
+    preview) admission_key_name=PREVIEW_IP_LIMIT_KEY ;;
+  esac
+  admission_key=$(_existing "$admission_key_name" || true)
+  if [[ -z "$admission_key" ]]; then admission_key=$(openssl rand -hex 32); fi
+  [[ ${#admission_key} -ge 32 ]] || { warn "The saved IP limit key is invalid."; exit 1; }
+  write_env "$admission_key_name" "$admission_key"
+  put_vercel IP_LIMIT_KEY "$admission_key" "$admission_target" secret
+  unset admission_key
+done
+note "Network allowances default to 20 questions per rolling hour. Keep each IP_LIMIT_KEY stable across deployments."
+
 
 stage "Dedicated production model credential"
 open_url "https://platform.openai.com/api-keys"

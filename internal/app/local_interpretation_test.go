@@ -202,7 +202,7 @@ func TestHostedQuestionsInterpretAmbiguityDirectly(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			model := &correctionModel{plans: []QueryPlan{{Status: "query", SQL: correctionLookupSQL, Interpretation: "Use OPS in 2025", Seasons: []int{2025}}}}
 			service, _ := testApp(t, model)
-			app := NewHostedHandler(service, HostedOptions{Mode: mode, Auth: auth, State: operationalFixture(t)})
+			app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: mode, Auth: auth, State: operationalFixture(t)})
 			token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
 			for _, question := range []string{"Who was the best hitter?", "What was Max Muncy's OPS in 2025?"} {
 				raw, _ := json.Marshal(QuestionRequest{Question: question})
