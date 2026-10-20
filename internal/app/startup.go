@@ -15,6 +15,16 @@ import (
 )
 
 func hostedConfig(c Config) (Config, error) {
+	switch os.Getenv("QUESTIONS_PAUSED") {
+	case "":
+	case "true":
+		c.QuestionsPaused = true
+	case "false":
+		c.QuestionsPaused = false
+	default:
+		return c, errors.New("QUESTIONS_PAUSED must be true or false")
+	}
+
 	platform := os.Getenv("VERCEL_ENV")
 	if os.Getenv("VERCEL") == "1" && platform == "" {
 		return c, errors.New("hosted deployment environment is missing")

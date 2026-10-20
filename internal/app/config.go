@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	QuestionsPaused            bool            `json:"questions_paused,omitempty"`
 	DeveloperSkipClarification bool            `json:"developer_skip_clarification,omitempty"`
 	DeveloperSQL               bool            `json:"developer_sql,omitempty"`
 	PricingProfile             *PricingProfile `json:"pricing_profile,omitempty"`
