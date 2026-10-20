@@ -241,7 +241,7 @@ func TestInvitedQuestionsRespectRollingHourlyAdmission(t *testing.T) {
 		}
 	}
 	w := hostedPost(app, token, `{"question":"Who led MLB in OPS?"}`)
-	if w.Code != 429 || w.Header().Get("Retry-After") != "3600" || !strings.Contains(w.Body.String(), "20 questions") || strings.Contains(w.Body.String(), "table") {
+	if w.Code != 429 || w.Header().Get("Retry-After") != "3600" || !strings.Contains(w.Body.String(), "13:00:00 UTC") || !strings.Contains(w.Body.String(), "20 questions") || strings.Contains(w.Body.String(), "table") {
 		t.Fatalf("rate bypass: %s", w.Body.String())
 	}
 	now = now.Add(time.Hour)

@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -118,5 +120,59 @@ func TestNetworkAllowanceConfigAndProcessingFailuresPersistAfterRestart(t *testi
 	w = hostedIPPost(resumed, token, "192.0.2.10", "")
 	if w.Code != 429 || w.Header().Get("Retry-After") != "60" {
 		t.Fatalf("newer admission did not remain counted: %d %v %s", w.Code, w.Header(), w.Body.String())
+	}
+}
+
+func TestExistingOperationalSchemaUpgradesWithoutUsingLegacyUserLimits(t *testing.T) {
+	admin := operationalFixture(t)
+	schema := "upgrade_" + randomToken()[:24]
+	if _, err := admin.pool.Exec(context.Background(), "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { admin.pool.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE") })
+	dsn, err := url.Parse(os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameters := dsn.Query()
+	parameters.Set("search_path", schema)
+	dsn.RawQuery = parameters.Encode()
+	fixture, err := pgxpool.New(context.Background(), dsn.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fixture.Close()
+	// Establish a previous-release schema, including an active legacy user lease.
+	_, err = fixture.Exec(context.Background(), `CREATE TABLE baseball_state_version(version integer PRIMARY KEY);
+ INSERT INTO baseball_state_version VALUES(1);
+ CREATE TABLE baseball_users(namespace text NOT NULL,user_id text NOT NULL,lease text NOT NULL,expires timestamptz NOT NULL,PRIMARY KEY(namespace,user_id));
+ INSERT INTO baseball_users VALUES('upgraded','user_invited','legacy-active','2099-01-01');
+ CREATE TABLE baseball_admissions(namespace text NOT NULL,id text NOT NULL,user_id text NOT NULL,created timestamptz NOT NULL,PRIMARY KEY(namespace,id));
+ INSERT INTO baseball_admissions VALUES('upgraded','old-admission','user_invited',now());`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := OpenOperationalStore(context.Background(), dsn.String(), "upgraded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	auth, sign, _ := hostedAuthFixture(t)
+	token := sign("user_invited", auth.Issuer, time.Now().Add(time.Hour))
+	build := func(store *OperationalStore) http.Handler {
+		svc, _ := testApp(t, PreviewModel{})
+		svc.Config.HourlyQuestionLimit = 1
+		return NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store})
+	}
+	if w := hostedIPPost(build(upgraded), token, "192.0.2.10", ""); !strings.Contains(w.Body.String(), `"kind":"answer"`) {
+		t.Fatalf("legacy user state blocked new network admission: %d %s", w.Code, w.Body.String())
+	}
+	reopened, err := OpenOperationalStore(context.Background(), dsn.String(), "upgraded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if w := hostedIPPost(build(reopened), token, "192.0.2.10", ""); w.Code != 429 {
+		t.Fatalf("version 2 reopen lost admission: %d %s", w.Code, w.Body.String())
 	}
 }

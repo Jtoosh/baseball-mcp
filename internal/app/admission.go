@@ -59,7 +59,7 @@ func (s *OperationalStore) admit(ctx context.Context, req QuestionRequest, limit
 		return nil, err
 	}
 	if count >= limit {
-		return nil, &admissionFailure{fmt.Sprintf("Your network has reached its allowance of %d questions per hour. Please try again after %s UTC.", limit, oldest.Add(time.Hour).Format("15:04:05")), retrySeconds(oldest.Add(time.Hour), now)}
+		return nil, &admissionFailure{fmt.Sprintf("Your network has reached its allowance of %d questions per hour. Please try again after %s UTC.", limit, oldest.Add(time.Hour).UTC().Format("15:04:05")), retrySeconds(oldest.Add(time.Hour), now)}
 	}
 	admission := randomToken()
 	if _, err = tx.Exec(ctx, `INSERT INTO baseball_ip_admissions(namespace,id,limiter_key,created) VALUES($1,$2,$3,$4)`, s.namespace, admission, identity.LimiterKey, now); err != nil {
