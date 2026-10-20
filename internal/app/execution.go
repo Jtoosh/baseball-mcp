@@ -135,6 +135,9 @@ func (q *QueryService) logFailure(stage string, err error) {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 				classification = "deadline_or_cancellation"
 			}
+			if errors.Is(err, errProviderUnavailable) {
+				classification = "provider_unavailable"
+			}
 			var denied *publicFailure
 			if errors.As(err, &denied) {
 				classification = "admission_denied"

@@ -250,7 +250,7 @@ put_vercel DATABASE_URL "$PREVIEW_DATABASE_URL" preview secret
 stage "Dedicated production model credential"
 open_url "https://platform.openai.com/api-keys"
 step "Select a dedicated project using standard/global processing for this application and create a server-only key. Never add this key to preview/development settings."
-step "Check the selected model and the validated pricing profile in config/hosted.json before enabling paid requests."
+step "Check the selected model in config/hosted.json before enabling paid requests. There is no application spending ceiling; prepaid provider balance exhaustion is accepted."
 ask_secret PRODUCTION_OPENAI_API_KEY "Production OpenAI key (hidden):"
 write_env PRODUCTION_OPENAI_API_KEY "$PRODUCTION_OPENAI_API_KEY"
 put_vercel OPENAI_API_KEY "$PRODUCTION_OPENAI_API_KEY" production secret

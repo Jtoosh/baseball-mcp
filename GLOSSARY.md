@@ -50,10 +50,10 @@ A person granted access by the site owner through an email invitation. An invita
 Acceptance of one independent question for processing. Clarifying or revising its pending interpretation remains part of that question.
 
 **Monthly allowance**:
-The $10 USD limit for this application's production model calls in a UTC calendar month, renewing at midnight UTC on the first day of the next month.
+A retired policy limiting this application's model spending within a UTC calendar month. Public access has no application monetary ceiling.
 
 **Spending reservation**:
-Funds held from the monthly allowance before a model call to cover its maximum validated cost. Uncertain billed work keeps its reservation.
+A retired hold against the monthly allowance for a model call. Historical holds no longer restrict questions.
 
 **Controlled preview**:
 A protected non-production version that uses predetermined test responses and isolated operational state rather than paid production model calls.
