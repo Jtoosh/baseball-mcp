@@ -103,7 +103,7 @@ Present the answer alongside an optional, clearly labelled result table. Ask for
 ## Out of Scope
 
 - Real MCP protocol compatibility, transport selection, and MCP SDK or manual protocol implementation.
-- Hosting was deferred from this browser-first phase; the approved hosting extension now defines Vercel deployment, invited access, shared operational state and spending controls. Hosted evaluation histories remain excluded.
+- Hosting was deferred from this browser-first phase; the approved hosting extension now defines Vercel deployment, public website access, shared network allowances and prepaid provider balance. Hosted evaluation histories remain excluded.
 - Live MLB fetching, automatic refreshes, in-browser uploads, and data mutation through natural-language requests.
 - Team-specific or AL/NL analysis not represented by the supplied export.
 - Pitching, postseason statistics, or unsupported seasons and metrics; explain these requests instead of fabricating data.

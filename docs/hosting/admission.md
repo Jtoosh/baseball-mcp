@@ -1,6 +1,6 @@
 # Network question admission
 
-Hosted questions share a network allowance: 20 admitted questions per rolling hour per exact canonical IP address, with one processing question at a time. Different accounts or browsers on the same office/home network share both controls. Processing failures consume an admission; malformed, obsolete and admission-denied requests do not. Local development has no hosted IP or Neon requirement. Sign-in remains required until the public-access ticket removes it.
+Hosted questions share a network allowance: 20 admitted questions per rolling hour per exact canonical IP address, with one processing question at a time. Different visitors or browsers on the same office/home network share both controls. Processing failures consume an admission; malformed, obsolete and admission-denied requests do not. Local development has no hosted IP or Neon requirement. No sign-in is required.
 
 ## Configuration and privacy
 

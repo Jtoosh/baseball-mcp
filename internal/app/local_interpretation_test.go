@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestLocalEvaluationBypassesAmbiguousPlayerClarification(t *testing.T) {
@@ -197,16 +196,16 @@ func TestLocalEvaluationCorrectedClarificationReturnsRetryError(t *testing.T) {
 }
 
 func TestHostedQuestionsInterpretAmbiguityDirectly(t *testing.T) {
-	auth, sign, _ := hostedAuthFixture(t)
+
 	for _, mode := range []string{"preview", "production"} {
 		t.Run(mode, func(t *testing.T) {
 			model := &correctionModel{plans: []QueryPlan{{Status: "query", SQL: correctionLookupSQL, Interpretation: "Use OPS in 2025", Seasons: []int{2025}}}}
 			service, _ := testApp(t, model)
-			app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: mode, Auth: auth, State: operationalFixture(t)})
-			token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
+			app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: mode, PublicOrigin: "https://baseball.example", State: operationalFixture(t)})
+
 			for _, question := range []string{"Who was the best hitter?", "What was Max Muncy's OPS in 2025?"} {
 				raw, _ := json.Marshal(QuestionRequest{Question: question})
-				response := hostedPost(app, token, string(raw))
+				response := hostedPost(app, string(raw))
 				var got Outcome
 				if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
 					t.Fatal(err)

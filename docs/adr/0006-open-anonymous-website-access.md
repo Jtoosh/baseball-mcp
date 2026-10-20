@@ -1,0 +1,3 @@
+# Open anonymous website access with shared network allowances
+
+The public demo must let visitors ask questions without email, accounts or invitations, replacing the invitation policy in hosting issue #9. Retain atomic shared network allowances and one active question per IP, accept shared-Wi-Fi contention and bypassable same-origin website submission checks, and rely on prepaid provider balance instead of adding CAPTCHA or identity verification. Controlled previews remain platform-protected with isolated fixture state; production is public and the owner can pause questions through deployment configuration.

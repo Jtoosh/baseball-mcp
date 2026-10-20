@@ -26,7 +26,7 @@ func TestPausedWebsiteRemainsAccessibleAndDeniesNewQuestions(t *testing.T) {
 	if err := json.Unmarshal(config.Body.Bytes(), &publicConfig); err != nil || !publicConfig.QuestionsPaused {
 		t.Fatalf("paused client config: %s", config.Body.String())
 	}
-	response := hostedPost(handler, "", `{"question":"Who led MLB in OPS?"}`)
+	response := hostedPost(handler, `{"question":"Who led MLB in OPS?"}`)
 	var got Outcome
 	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
@@ -38,19 +38,18 @@ func TestPausedWebsiteRemainsAccessibleAndDeniesNewQuestions(t *testing.T) {
 
 func TestHostedPausePreservesAdmissionsAndActiveQuestionsAcrossResume(t *testing.T) {
 	store := operationalFixture(t)
-	auth, sign, _ := hostedAuthFixture(t)
-	token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
+
 	started, finish := make(chan struct{}), make(chan struct{})
 	running, _ := testApp(t, waitingProviderModel{started, finish})
 	paused, _ := testApp(t, waitingErrorModel{"paused request reached provider"})
 	paused.Config.QuestionsPaused = true
 	resumed, _ := testApp(t, PreviewModel{})
-	options := HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", Auth: auth, State: store}
+	options := HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview", PublicOrigin: "https://baseball.example", State: store}
 	runningHandler := NewHostedHandler(running, options)
 	pausedHandler := NewHostedHandler(paused, options)
 	resumedHandler := NewHostedHandler(resumed, options)
 	done := make(chan *httptest.ResponseRecorder, 1)
-	go func() { done <- hostedPost(runningHandler, token, `{"question":"Who led MLB in OPS?"}`) }()
+	go func() { done <- hostedPost(runningHandler, `{"question":"Who led MLB in OPS?"}`) }()
 	select {
 	case <-started:
 	case <-time.After(3 * time.Second):
@@ -64,12 +63,12 @@ func TestHostedPausePreservesAdmissionsAndActiveQuestionsAcrossResume(t *testing
 		}
 	}()
 	for i := 0; i < 25; i++ {
-		response := hostedPost(pausedHandler, token, `{"question":"Who led MLB in OPS?"}`)
+		response := hostedPost(pausedHandler, `{"question":"Who led MLB in OPS?"}`)
 		if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "Questions are temporarily unavailable") {
 			t.Fatalf("pause failed: %d %s", response.Code, response.Body.String())
 		}
 	}
-	busy := hostedPost(resumedHandler, token, `{"question":"Who led MLB in OPS?"}`)
+	busy := hostedPost(resumedHandler, `{"question":"Who led MLB in OPS?"}`)
 	if !strings.Contains(busy.Body.String(), "already has a question") {
 		t.Fatalf("resume discarded active lease: %s", busy.Body.String())
 	}
@@ -78,25 +77,25 @@ func TestHostedPausePreservesAdmissionsAndActiveQuestionsAcrossResume(t *testing
 		t.Fatalf("pause interrupted admitted question: %s", response.Body.String())
 	}
 	for i := 0; i < 19; i++ {
-		response := hostedPost(resumedHandler, token, `{"question":"Who led MLB in OPS?"}`)
+		response := hostedPost(resumedHandler, `{"question":"Who led MLB in OPS?"}`)
 		if !strings.Contains(response.Body.String(), `"kind":"answer"`) {
 			t.Fatalf("paused request consumed admission %d: %s", i, response.Body.String())
 		}
 	}
-	response := hostedPost(resumedHandler, token, `{"question":"Who led MLB in OPS?"}`)
+	response := hostedPost(resumedHandler, `{"question":"Who led MLB in OPS?"}`)
 	if !strings.Contains(response.Body.String(), "20 questions") {
 		t.Fatalf("resume reset admissions: %s", response.Body.String())
 	}
 }
 
-func TestHostedPauseDeniesNewQuestionsBeforeAuthorizationOrStateWork(t *testing.T) {
+func TestHostedPauseDeniesNewQuestionsBeforeAdmissionOrStateWork(t *testing.T) {
 	svc, _ := testApp(t, waitingErrorModel{"paused request reached provider"})
 	svc.Config.QuestionsPaused = true
-	// A paused deployment can return its safe outcome even when authorization or
+	// A paused deployment can return its safe outcome even when admission or
 	// operational storage is unavailable; neither is needed to refuse new work.
 	handler := NewHostedHandler(svc, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: "preview"})
-	response := hostedPost(handler, "", `{"question":"Who led MLB in OPS?"}`)
+	response := hostedPost(handler, `{"question":"Who led MLB in OPS?"}`)
 	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), `"message":"Questions are temporarily unavailable"`) {
-		t.Fatalf("pause depended on authorization: %d %s", response.Code, response.Body.String())
+		t.Fatalf("pause depended on admission: %d %s", response.Code, response.Body.String())
 	}
 }

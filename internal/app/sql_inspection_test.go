@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestLocalQuestionShowsInitialSQLForEachStrategy(t *testing.T) {
@@ -140,15 +139,15 @@ func TestLocalSQLInspectionReportsNoQueryOnClarification(t *testing.T) {
 var errInspectionProvider = errors.New("private provider error")
 
 func TestHostedQuestionsExcludeInspectionEvenWhenConfigured(t *testing.T) {
-	auth, sign, _ := hostedAuthFixture(t)
+
 	for _, mode := range []string{"preview", "production"} {
 		t.Run(mode, func(t *testing.T) {
 			service, _ := testApp(t, &scriptedModel{plan: QueryPlan{Status: "query", SQL: correctionLookupSQL, Seasons: []int{2025}}})
 			service.Config.DeveloperSQL = true
 			service.Config.Listen = "127.0.0.1:8080"
-			app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: mode, Auth: auth, State: operationalFixture(t)})
-			token := sign("user_invited", "https://clerk.test.accounts.dev", time.Now().Add(time.Hour))
-			response := hostedPost(app, token, `{"question":"What was Luis Vázquez's OPS in 2025?"}`)
+			app := NewHostedHandler(service, HostedOptions{IPLimitKey: fixtureIPLimitKey, Mode: mode, PublicOrigin: "https://baseball.example", State: operationalFixture(t)})
+
+			response := hostedPost(app, `{"question":"What was Luis Vázquez's OPS in 2025?"}`)
 			if response.Code != 200 || !strings.Contains(response.Body.String(), `"kind":"answer"`) {
 				t.Fatalf("answer unavailable: %s", response.Body.String())
 			}

@@ -3,8 +3,6 @@ module github.com/jtoosh/baseball-mcp
 go 1.26.6
 
 require (
-	github.com/clerk/clerk-sdk-go/v2 v2.7.0
-	github.com/go-jose/go-jose/v3 v3.0.4
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/ncruces/go-sqlite3 v0.35.6
 	github.com/openai/openai-go/v3 v3.77.0
@@ -22,7 +20,6 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 )
