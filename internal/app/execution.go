@@ -138,10 +138,6 @@ func (q *QueryService) logFailure(stage string, err error) {
 			if errors.Is(err, errProviderUnavailable) {
 				classification = "provider_unavailable"
 			}
-			var denied *publicFailure
-			if errors.As(err, &denied) {
-				classification = "admission_denied"
-			}
 			q.Logger.Printf("stage=%q class=%s", stage, classification)
 		} else {
 			q.Logger.Printf("%s: %v", stage, err)
