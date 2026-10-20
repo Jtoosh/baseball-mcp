@@ -1,5 +1,8 @@
 # Proposed hosting tickets
 
+Historical hosting plan: the public-access spec [#25](https://github.com/Jtoosh/baseball-mcp/issues/25) supersedes its sign-in and spending policy. Current operational instructions are in [hosting/setup.md](hosting/setup.md); ADR 0005 replaces the monthly allowance and reservations with prepaid provider balance.
+
+
 Parent specification: https://github.com/Jtoosh/baseball-mcp/issues/9
 
 Status: approved and published. Plan positions map to GitHub issues in hosting-publication.json; dependencies are native GitHub blocking relationships.

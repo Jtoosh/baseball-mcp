@@ -124,7 +124,6 @@ func startHosted(c Config) (http.Handler, func(), error) {
 		}
 		live := NewOpenAIModel(c.Model)
 		live.Client = openai.NewClient(option.WithAPIKey(os.Getenv("OPENAI_API_KEY")), option.WithBaseURL("https://api.openai.com/v1/"), option.WithMaxRetries(0))
-		live.Budget = &SpendingGuard{State: state, Profile: c.PricingProfile}
 		model = live
 	}
 	service := NewQueryService(db, model, c, logger)

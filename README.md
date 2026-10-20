@@ -51,7 +51,7 @@ Try these questions:
 - “Is any qualifying player in the top ten for HR, 1B, and 2B in 2026?”
 
 Hosted access allows 20 new questions per user per rolling hour and one active
-request at a time. A shared monthly model-spending allowance can pause questions.
+request at a time. Questions use the owner's prepaid provider balance, with no application spending ceiling.
 
 ## More info
 

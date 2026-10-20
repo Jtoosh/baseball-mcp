@@ -14,10 +14,11 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
+const hostedOutputTokens int64 = 2048
+
 type OpenAIModel struct {
 	Client    openai.Client
 	ModelName string
-	Budget    *SpendingGuard
 }
 
 func NewOpenAIModel(model string) *OpenAIModel {
@@ -26,25 +27,14 @@ func NewOpenAIModel(model string) *OpenAIModel {
 func (m *OpenAIModel) structured(ctx context.Context, name, instructions, input string, schema map[string]any, target any) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	params := responses.ResponseNewParams{Model: m.ModelName, Input: responses.ResponseNewParamsInputUnion{OfString: openai.String(input)}, Instructions: openai.String(instructions), Store: openai.Bool(false), Text: responses.ResponseTextConfigParam{Format: responses.ResponseFormatTextConfigUnionParam{OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{Name: name, Schema: schema, Strict: openai.Bool(true)}}}}
-	var reservation spendingReservation
-	if m.Budget != nil {
-		params.MaxOutputTokens = openai.Int(hostedOutputTokens)
-		params.ServiceTier = responses.ResponseNewParamsServiceTierDefault
-		var err error
-		reservation, err = m.Budget.reserve(ctx, m.ModelName)
-		if err != nil {
-			return err
-		}
-	}
+	params := responses.ResponseNewParams{MaxOutputTokens: openai.Int(hostedOutputTokens), ServiceTier: responses.ResponseNewParamsServiceTierDefault, Model: m.ModelName, Input: responses.ResponseNewParamsInputUnion{OfString: openai.String(input)}, Instructions: openai.String(instructions), Store: openai.Bool(false), Text: responses.ResponseTextConfigParam{Format: responses.ResponseFormatTextConfigUnionParam{OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{Name: name, Schema: schema, Strict: openai.Bool(true)}}}}
 	response, err := m.Client.Responses.New(ctx, params)
 	if err != nil {
-		return err
-	}
-	if m.Budget != nil {
-		if err = m.Budget.settle(ctx, reservation, response); err != nil {
-			return err
+		var provider *openai.Error
+		if errors.As(err, &provider) && (provider.StatusCode == 429 || provider.Code == "insufficient_quota" || provider.Code == "billing_hard_limit_reached") {
+			return errProviderUnavailable
 		}
+		return err
 	}
 	if response.Status != "completed" {
 		return errors.New("model response was incomplete")
